@@ -20,7 +20,6 @@ struct DashboardView: View {
                     changedLately(r)
                     spotCheck(r)
                     timeline(r)
-                    movers(r)
                     trends(r)
                     categories(r)
                     topics(r)
@@ -31,7 +30,6 @@ struct DashboardView: View {
                     days(r)
                     dayEdges(r)
                     habits(r)
-                    depth(r)
                     shared(r)
                     pace(r)
                     sessions(r)
@@ -99,7 +97,7 @@ struct DashboardView: View {
 
     private func changedLately(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "CHANGED LATELY",
-                    subtitle: "Biggest shifts this month vs the same point last month") {
+                    subtitle: "\(r.curPeriodLabel) vs \(r.prevPeriodLabel)") {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(r.changedLately.enumerated()), id: \.offset) { _, c in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -133,7 +131,7 @@ struct DashboardView: View {
 
     private func spotCheck(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "SPOT CHECK",
-                    subtitle: "Did it change? — month-to-date vs same point last month") {
+                    subtitle: "Did it change? — \(r.curPeriodLabel) vs \(r.prevPeriodLabel)") {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
                     Menu {
@@ -208,32 +206,6 @@ struct DashboardView: View {
         }
         let cur = fmtDur(c.focusThisWeek), prev = fmtDur(c.focusPrevWeek)
         return "focused time: \(cur) this week vs \(prev) last week"
-    }
-
-    // MARK: - movers
-
-    private func movers(_ r: ReportEngine.Report) -> some View {
-        BrowserBand(label: "MOVERS",
-                    subtitle: "Domains rising / falling vs last month") {
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("RISING").font(.caption.weight(.semibold))
-                        .foregroundStyle(BrowserTheme.mintInk)
-                    ForEach(Array(r.moversUp.enumerated()), id: \.offset) { _, m in
-                        RankRow(value: "+\(m.value.formatted())",
-                                label: m.label, note: m.extra)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("FALLING").font(.caption.weight(.semibold))
-                        .foregroundStyle(BrowserTheme.coral)
-                    ForEach(Array(r.moversDown.enumerated()), id: \.offset) { _, m in
-                        RankRow(value: m.value.formatted(),
-                                label: m.label, note: m.extra)
-                    }
-                }
-            }
-        }
     }
 
     // MARK: - categories
@@ -366,7 +338,12 @@ struct DashboardView: View {
         BrowserBand(label: "DEEP READ",
                     subtitle: "Focused minutes per visit — the sites you actually read vs. quick-hit") {
             VStack(alignment: .leading, spacing: 8) {
-                if r.deepRead.isEmpty {
+                if r.focusDaily.count < 3 {
+                    Text("Accumulating — needs ~3 days of focus data "
+                         + "(\(r.focusDaily.count) so far) before "
+                         + "minutes-per-visit means anything.")
+                        .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
+                } else if r.deepRead.isEmpty {
                     Text("Needs both history and accumulated focus data.")
                         .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
                 }
@@ -438,6 +415,11 @@ struct DashboardView: View {
     private func pace(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "PACE",
                     subtitle: "Attention fragmentation — from live focus data") {
+            if r.focusDaily.count < 3 {
+                Text("Accumulating — \(r.focusDaily.count) day(s) of focus "
+                     + "data; fragmentation stats need ~a week.")
+                    .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
+            } else {
             HStack(spacing: 28) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(String(format: "%.0f", r.switchesPerFocusHour))
@@ -452,6 +434,7 @@ struct DashboardView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            }
         }
     }
 
@@ -459,19 +442,13 @@ struct DashboardView: View {
 
     private func trends(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "TRENDS",
-                    subtitle: "Focus per day · archive growth · top-site momentum") {
+                    subtitle: "Focus per day · exploration rate · top-site momentum") {
             HStack(alignment: .top, spacing: 20) {
                 TrendLine(
                     title: "Focused time / day",
                     points: r.focusDaily.map(\.activeSeconds),
                     labels: (r.focusDaily.first?.date ?? "",
                              r.focusDaily.last?.date ?? ""))
-                TrendLine(
-                    title: "Unique domains (cumulative)",
-                    points: r.cumulativeDomains.map { Double($0.value) },
-                    labels: (r.cumulativeDomains.first?.label ?? "",
-                             r.cumulativeDomains.last?.label ?? ""),
-                    color: BrowserTheme.cyan, kind: .count)
                 TrendLine(
                     title: "New domains / month",
                     points: r.newDomainsPerWeek.map { Double($0.value) },
@@ -645,47 +622,6 @@ struct DashboardView: View {
                                 label: "longest gap (no visits)")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-        }
-    }
-
-    // MARK: - depth
-
-    private func depth(_ r: ReportEngine.Report) -> some View {
-        BrowserBand(label: "DEPTH",
-                    subtitle: "Concentration — how much of browsing is a few sites") {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack(spacing: 28) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(String(format: "%.0f%%", r.top10Share))
-                            .font(.title2.bold())
-                            .foregroundStyle(BrowserTheme.mintInk)
-                        Text("of visits go to your top 10 domains")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(String(format: "%.0f%%", r.top100Share))
-                            .font(.title2.bold())
-                            .foregroundStyle(BrowserTheme.cyan)
-                        Text("in top 100 — the long tail is huge")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(r.oneHitDomains.formatted())
-                            .font(.title2.bold())
-                            .foregroundStyle(BrowserTheme.amber)
-                        Text("domains visited exactly once")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Divider().overlay(BrowserTheme.divider)
-                Text("REVISIT DEPTH").font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                let habitTotal = max(1, r.habit.reduce(0) { $0 + $1.value })
-                ForEach(r.habit, id: \.label) { h in
-                    RankRow(value: h.value.formatted(), label: h.label,
-                            note: pct(h.value, of: habitTotal))
                 }
             }
         }

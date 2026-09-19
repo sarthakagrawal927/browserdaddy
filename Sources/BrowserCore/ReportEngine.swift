@@ -92,6 +92,8 @@ public struct ReportEngine: Sendable {
         public var monthlySeries: [DayPoint] = []   // month × browser
         public var noveltyWeekly: [Count] = []      // week → % visits to first-seen domains
         public var changedLately: [(host: String, cur: Int64, prev: Int64, pct: Double)] = []
+        public var curPeriodLabel = ""            // e.g. "Sep 1–19"
+        public var prevPeriodLabel = ""           // e.g. "Aug 1–19"
         public var moversUp: [Count] = []           // domains rising month-over-month
         public var moversDown: [Count] = []
         public var deepRead: [Count] = []           // site → active-minutes per visit
@@ -510,6 +512,10 @@ public struct ReportEngine: Sendable {
         let prevMonth = df.string(from: cal.date(
             byAdding: .month, value: -1, to: Date()) ?? Date())
         let today = cal.component(.day, from: Date())
+        let mf = DateFormatter(); mf.dateFormat = "MMM"
+        let prevDate = cal.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+        r.curPeriodLabel = "\(mf.string(from: Date())) 1–\(today)"
+        r.prevPeriodLabel = "\(mf.string(from: prevDate)) 1–\(today)"
         let mtdRows = try db.query("""
             SELECT \(Self.hostSQL) h,
                    SUM(CASE WHEN m = ? THEN 1 ELSE 0 END) cur,
