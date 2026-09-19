@@ -40,6 +40,12 @@ final class AppModel: ObservableObject {
         Task.detached(priority: .utility) { [store] in
             _ = try? ArchiveImporter.importIfNeeded(into: store)
             await self.reload()
+            await self.runExtract()   // first-boot archive pass
+        }
+        // Archive stays fresh without launchd: re-extract while running.
+        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in self?.runExtract() }
         }
     }
 
