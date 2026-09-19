@@ -8,6 +8,7 @@ struct DashboardView: View {
         ScrollView {
             if let r = model.report, r.totalVisits > 0 {
                 VStack(spacing: 16) {
+                    FilterBar()
                     verdict(r)
                     timeline(r)
                     trends(r)

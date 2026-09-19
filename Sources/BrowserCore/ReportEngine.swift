@@ -88,21 +88,39 @@ public struct ReportEngine: Sendable {
         public var oneHitDomains: Int64 = 0     // domains visited exactly once
     }
 
-    public func build() throws -> Report {
+    /// `source` is "browser/profile"; `sinceDays` = 0 means all time.
+    public func build(source: String? = nil, sinceDays: Int = 0) throws -> Report {
+        var conds: [String] = []
+        if let source, !source.isEmpty {
+            let esc = source.replacingOccurrences(of: "'", with: "''")
+            conds.append("browser||'/'||profile = '\(esc)'")
+        }
+        var sinceISO = ""
+        if sinceDays > 0 {
+            sinceISO = ISO8601.format(
+                Date().addingTimeInterval(-Double(sinceDays) * 86400))
+            conds.append("visit_time_utc >= '\(sinceISO)'")
+        }
+        let vw = conds.isEmpty ? "" : " WHERE " + conds.joined(separator: " AND ")
+        let va = conds.isEmpty ? "" : " AND " + conds.joined(separator: " AND ")
+        let fw = sinceDays > 0 ? " WHERE start_utc >= '\(sinceISO)'" : ""
+        // searches has no timestamp — source filter only.
+        let sw = source.map { " WHERE browser||'/'||profile = '"
+            + $0.replacingOccurrences(of: "'", with: "''") + "'" } ?? ""
         var r = Report()
         r.totalVisits = try db.scalar(
-            "SELECT COUNT(*) FROM visits", as: { $0.int }) ?? 0
+            "SELECT COUNT(*) FROM visits\(vw)", as: { $0.int }) ?? 0
         r.uniqueURLs = try db.scalar(
-            "SELECT COUNT(DISTINCT url) FROM visits", as: { $0.int }) ?? 0
+            "SELECT COUNT(DISTINCT url) FROM visits\(vw)", as: { $0.int }) ?? 0
         r.uniqueDomains = try db.scalar(
-            "SELECT COUNT(DISTINCT \(Self.hostSQL)) FROM visits",
+            "SELECT COUNT(DISTINCT \(Self.hostSQL)) FROM visits\(vw)",
             as: { $0.int }) ?? 0
 
         r.sources = try db.query("""
             SELECT browser||'/'||profile src, COUNT(*) c,
                    strftime('%Y-%m-%d',MIN(visit_time_utc),'localtime') f,
                    strftime('%Y-%m-%d',MAX(visit_time_utc),'localtime') l
-            FROM visits GROUP BY 1 ORDER BY 2 DESC
+            FROM visits\(vw) GROUP BY 1 ORDER BY 2 DESC
         """).map {
             SourceSummary(name: $0["src"]?.text ?? "?",
                           visits: $0["c"]?.int ?? 0,
@@ -112,7 +130,7 @@ public struct ReportEngine: Sendable {
 
         let months = try db.query("""
             SELECT strftime('%Y-%m',visit_time_utc,'localtime') m, browser, COUNT(*) c
-            FROM visits GROUP BY m, browser ORDER BY m, c DESC
+            FROM visits\(vw) GROUP BY m, browser ORDER BY m, c DESC
         """)
         var byMonth: [String: [(String, Int64)]] = [:]
         var order: [String] = []
@@ -131,7 +149,7 @@ public struct ReportEngine: Sendable {
         }
 
         let hostCounts = try db.query("""
-            SELECT \(Self.hostSQL) h, COUNT(*) c FROM visits
+            SELECT \(Self.hostSQL) h, COUNT(*) c FROM visits\(vw)
             GROUP BY h
         """).map { ($0["h"]?.text ?? "?", $0["c"]?.int ?? 0) }
         r.topDomains = hostCounts.sorted { $0.1 > $1.1 }.prefix(20).map {
@@ -144,11 +162,11 @@ public struct ReportEngine: Sendable {
         }
 
         for src in try db.query(
-            "SELECT DISTINCT browser||'/'||profile s FROM visits") {
+            "SELECT DISTINCT browser||'/'||profile s FROM visits\(vw)") {
             let s = src["s"]?.text ?? ""
             let top = try db.query("""
                 SELECT \(Self.hostSQL) h, COUNT(*) c FROM visits
-                WHERE browser||'/'||profile = ?
+                WHERE browser||'/'||profile = ?\(va)
                 GROUP BY h ORDER BY c DESC LIMIT 5
             """, [.text(s)])
                 .map { "\($0["h"]?.text ?? "?") (\($0["c"]?.int ?? 0))" }
@@ -162,7 +180,7 @@ public struct ReportEngine: Sendable {
                          AS INT) IN (0,6) THEN 1 ELSE 0 END)/COUNT(*),1) we,
                    ROUND(100.0*SUM(CASE WHEN CAST(strftime('%H',visit_time_utc,'localtime')
                          AS INT) BETWEEN 18 AND 23 THEN 1 ELSE 0 END)/COUNT(*),1) ev
-            FROM visits GROUP BY 1 ORDER BY 2 DESC
+            FROM visits\(vw) GROUP BY 1 ORDER BY 2 DESC
         """).map {
             Count(label: $0["s"]?.text ?? "?", value: $0["c"]?.int ?? 0,
                   extra: "\($0["u"]?.int ?? 0) urls · \($0["we"]?.double ?? 0)% wknd · \($0["ev"]?.double ?? 0)% eve")
@@ -170,7 +188,7 @@ public struct ReportEngine: Sendable {
 
         r.hourly = try db.query("""
             SELECT CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
-            FROM visits GROUP BY h ORDER BY h
+            FROM visits\(vw) GROUP BY h ORDER BY h
         """).map {
             Count(label: String(format: "%02d:00", $0["h"]?.int ?? 0),
                   value: $0["c"]?.int ?? 0)
@@ -178,14 +196,14 @@ public struct ReportEngine: Sendable {
         let dnames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
         r.weekday = try db.query("""
             SELECT strftime('%w',visit_time_utc,'localtime') d, COUNT(*) c
-            FROM visits GROUP BY d ORDER BY d
+            FROM visits\(vw) GROUP BY d ORDER BY d
         """).map {
             Count(label: dnames[Int($0["d"]?.text ?? "0") ?? 0],
                   value: $0["c"]?.int ?? 0)
         }
         r.daily = try db.query("""
             SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, COUNT(*) c
-            FROM visits GROUP BY d ORDER BY d DESC LIMIT 30
+            FROM visits\(vw) GROUP BY d ORDER BY d DESC LIMIT 30
         """).reversed().map {
             Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0)
         }
@@ -194,7 +212,7 @@ public struct ReportEngine: Sendable {
                                 (6,20,"6-20 times"),(21,Int.max,"20+ times")] {
             let n = try db.scalar("""
                 SELECT COUNT(*) FROM (
-                  SELECT \(Self.hostSQL) h, COUNT(*) n FROM visits GROUP BY h)
+                  SELECT \(Self.hostSQL) h, COUNT(*) n FROM visits\(vw) GROUP BY h)
                 WHERE n BETWEEN ? AND ?
             """,
                 [.int(Int64(lo)), .int(Int64(hi))], as: { $0.int }) ?? 0
@@ -202,7 +220,7 @@ public struct ReportEngine: Sendable {
         }
 
         r.revisited = try db.query("""
-            SELECT url, MAX(visit_count) c FROM visits
+            SELECT url, MAX(visit_count) c FROM visits\(vw)
             GROUP BY url ORDER BY c DESC LIMIT 15
         """).map {
             Count(label: $0["url"]?.text ?? "?", value: $0["c"]?.int ?? 0)
@@ -212,7 +230,7 @@ public struct ReportEngine: Sendable {
             SELECT browser||'/'||profile s, SUM(vc) v, SUM(tc) t FROM (
               SELECT browser, profile, url,
                      MAX(visit_count) vc, MAX(typed_count) tc
-              FROM visits GROUP BY browser, profile, url)
+              FROM visits\(vw) GROUP BY browser, profile, url)
             GROUP BY 1 ORDER BY 2 DESC
         """).map {
             let v = $0["v"]?.double ?? 0, t = $0["t"]?.double ?? 0
@@ -225,7 +243,7 @@ public struct ReportEngine: Sendable {
         let sess = try db.query("""
             WITH v AS (
               SELECT browser||'/'||profile src, julianday(visit_time_utc) jd,
-                     \(Self.hostSQL) h FROM visits)
+                     \(Self.hostSQL) h FROM visits\(vw))
             , g AS (
               SELECT src, jd, h,
                      CASE WHEN jd - LAG(jd) OVER (PARTITION BY src ORDER BY jd)
@@ -252,8 +270,9 @@ public struct ReportEngine: Sendable {
                   extra: "avg \(fmtDur(a.tot/Double(a.n))) · longest \(fmtDur(a.mx))")
         }.sorted { $0.value > $1.value }
         r.rabbitHoles = sess.sorted {
-            ($0["dom"]?.int ?? 0, $0["span"]?.double ?? 0)
-                > ($1["dom"]?.int ?? 0, $1["span"]?.double ?? 0)
+            let a = (dom: $0["dom"]?.int ?? 0, span: $0["span"]?.double ?? 0)
+            let b = (dom: $1["dom"]?.int ?? 0, span: $1["span"]?.double ?? 0)
+            return a.dom != b.dom ? a.dom > b.dom : a.span > b.span
         }.prefix(10).map {
             Session(source: $0["src"]?.text ?? "?",
                     visits: $0["n"]?.int ?? 0,
@@ -263,11 +282,11 @@ public struct ReportEngine: Sendable {
                         (($0["start_jd"]?.double ?? 0) - 2440587.5) * 86400))
         }
 
-        r.attentionApps = try attentionApps()
-        r.attentionSites = try attentionSites()
+        r.attentionApps = try attentionApps(sinceDays: sinceDays)
+        r.attentionSites = try attentionSites(sinceDays: sinceDays)
 
         r.searches = try db.query("""
-            SELECT term, COUNT(*) c FROM searches
+            SELECT term, COUNT(*) c FROM searches\(sw)
             GROUP BY lower(term) ORDER BY c DESC LIMIT 15
         """).map {
             Count(label: $0["term"]?.text ?? "?", value: $0["c"]?.int ?? 0)
@@ -277,7 +296,7 @@ public struct ReportEngine: Sendable {
 
         r.dailySeries = try db.query("""
             SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, browser, COUNT(*) c
-            FROM visits GROUP BY d, browser ORDER BY d
+            FROM visits\(vw) GROUP BY d, browser ORDER BY d
         """).map {
             DayPoint(date: $0["d"]?.text ?? "",
                      browser: $0["browser"]?.text ?? "?",
@@ -287,7 +306,7 @@ public struct ReportEngine: Sendable {
         for row in try db.query("""
             SELECT CAST(strftime('%w',visit_time_utc,'localtime') AS INT) d,
                    CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
-            FROM visits GROUP BY d, h
+            FROM visits\(vw) GROUP BY d, h
         """) {
             let d = Int(row["d"]?.int ?? 0), h = Int(row["h"]?.int ?? 0)
             if (0...6).contains(d), (0...23).contains(h) {
@@ -297,7 +316,7 @@ public struct ReportEngine: Sendable {
 
         r.focusDaily = try db.query("""
             SELECT strftime('%Y-%m-%d',start_utc,'localtime') d, SUM(active_s) a, SUM(ticks) t
-            FROM focus GROUP BY d ORDER BY d
+            FROM focus\(fw) GROUP BY d ORDER BY d
         """).map {
             FocusDay(date: $0["d"]?.text ?? "",
                      activeSeconds: $0["a"]?.double ?? 0,
@@ -307,7 +326,7 @@ public struct ReportEngine: Sendable {
         // First-seen month per domain → exploration rate + cumulative coverage.
         let firstSeen = try db.query("""
             SELECT fs m, COUNT(*) c FROM (
-              SELECT MIN(strftime('%Y-%m',visit_time_utc,'localtime')) fs FROM visits
+              SELECT MIN(strftime('%Y-%m',visit_time_utc,'localtime')) fs FROM visits\(vw)
               GROUP BY \(Self.hostSQL)) GROUP BY fs ORDER BY fs
         """).map {
             Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
@@ -323,7 +342,7 @@ public struct ReportEngine: Sendable {
         for dom in r.topDomains.prefix(6) {
             let rows = try db.query("""
                 SELECT strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) c FROM visits
-                WHERE \(Self.hostSQL) = ? GROUP BY m ORDER BY m
+                WHERE \(Self.hostSQL) = ?\(va) GROUP BY m ORDER BY m
             """, [.text(dom.label)])
             r.domainTrends.append((dom.label, rows.map {
                 Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
@@ -337,7 +356,7 @@ public struct ReportEngine: Sendable {
         for row in try db.query("""
             SELECT browser||'/'||profile s,
                    CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
-            FROM visits GROUP BY s, h
+            FROM visits\(vw) GROUP BY s, h
         """) {
             let s = row["s"]?.text ?? "?", h = Int(row["h"]?.int ?? 0)
             if (0...23).contains(h) {
@@ -349,14 +368,14 @@ public struct ReportEngine: Sendable {
 
         r.busiestDays = try db.query("""
             SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, COUNT(*) c
-            FROM visits GROUP BY d ORDER BY c DESC LIMIT 10
+            FROM visits\(vw) GROUP BY d ORDER BY c DESC LIMIT 10
         """).map { Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0) }
 
         var dowSrc: [String: [Int64]] = [:]
         for row in try db.query("""
             SELECT browser||'/'||profile s,
                    CAST(strftime('%w',visit_time_utc,'localtime') AS INT) d, COUNT(*) c
-            FROM visits GROUP BY s, d
+            FROM visits\(vw) GROUP BY s, d
         """) {
             let s = row["s"]?.text ?? "?", d = Int(row["d"]?.int ?? 0)
             if (0...6).contains(d) {
@@ -367,7 +386,7 @@ public struct ReportEngine: Sendable {
 
         // Concentration: share of visits in top-10 / top-100 domains.
         if r.totalVisits > 0 {
-            let sorted = hostCounts.map(\.1).sorted(by: >)
+            let sorted = hostCounts.map { $0.1 }.sorted(by: >)
             r.top10Share = Double(sorted.prefix(10).reduce(0, +))
                 / Double(r.totalVisits) * 100
             r.top100Share = Double(sorted.prefix(100).reduce(0, +))
@@ -404,7 +423,7 @@ public struct ReportEngine: Sendable {
         r.sharedDomains = try db.query("""
             SELECT \(Self.hostSQL) h, COUNT(DISTINCT browser||'/'||profile) n,
                    GROUP_CONCAT(DISTINCT browser) srcs, COUNT(*) c
-            FROM visits GROUP BY h HAVING n > 1
+            FROM visits\(vw) GROUP BY h HAVING n > 1
             ORDER BY c DESC LIMIT 15
         """).map {
             (domain: $0["h"]?.text ?? "?",
@@ -414,9 +433,23 @@ public struct ReportEngine: Sendable {
         return r
     }
 
-    public func attentionApps() throws -> [Count] {
+    private func focusWhere(_ sinceDays: Int) -> String {
+        guard sinceDays > 0 else { return "" }
+        let iso = ISO8601.format(
+            Date().addingTimeInterval(-Double(sinceDays) * 86400))
+        return " WHERE start_utc >= '\(iso)'"
+    }
+    private func focusAnd(_ sinceDays: Int) -> String {
+        guard sinceDays > 0 else { return "" }
+        let iso = ISO8601.format(
+            Date().addingTimeInterval(-Double(sinceDays) * 86400))
+        return " AND start_utc >= '\(iso)'"
+    }
+
+    public func attentionApps(sinceDays: Int = 0) throws -> [Count] {
         try db.query("""
-            SELECT app, SUM(active_s) a, SUM(ticks)*2.0 o FROM focus
+            SELECT app, SUM(active_s) a, SUM(ticks)*2.0 o
+            FROM focus\(focusWhere(sinceDays))
             GROUP BY app ORDER BY a DESC LIMIT 15
         """).map {
             Count(label: $0["app"]?.text ?? "?",
@@ -452,19 +485,19 @@ public struct ReportEngine: Sendable {
     }
 
     /// Days that have focus data, newest first.
-    public func focusDays() throws -> [String] {
+    public func focusDays(sinceDays: Int = 0) throws -> [String] {
         try db.query("""
             SELECT strftime('%Y-%m-%d',start_utc,'localtime') d, SUM(active_s) a
-            FROM focus GROUP BY d ORDER BY d DESC
+            FROM focus\(focusWhere(sinceDays)) GROUP BY d ORDER BY d DESC
         """).compactMap { $0["d"]?.text }
     }
 
     /// Active seconds by hour-of-day — when attention actually happens.
-    public func attentionHourly() throws -> [Int64] {
+    public func attentionHourly(sinceDays: Int = 0) throws -> [Int64] {
         var hours = Array(repeating: Int64(0), count: 24)
         for row in try db.query("""
             SELECT CAST(strftime('%H',start_utc,'localtime') AS INT) h,
-                   SUM(active_s) a FROM focus GROUP BY h
+                   SUM(active_s) a FROM focus\(focusWhere(sinceDays)) GROUP BY h
         """) {
             let h = Int(row["h"]?.int ?? 0)
             if (0...23).contains(h) { hours[h] = Int64(row["a"]?.double ?? 0) }
@@ -473,11 +506,11 @@ public struct ReportEngine: Sendable {
     }
 
     /// Per-app totals: active vs open vs segment count vs longest span.
-    public func attentionAppsDetailed() throws -> [Count] {
+    public func attentionAppsDetailed(sinceDays: Int = 0) throws -> [Count] {
         try db.query("""
             SELECT app, SUM(active_s) a, SUM(ticks)*2.0 o,
                    COUNT(*) n, MAX(active_s) longest
-            FROM focus GROUP BY app ORDER BY a DESC
+            FROM focus\(focusWhere(sinceDays)) GROUP BY app ORDER BY a DESC
         """).map {
             Count(label: $0["app"]?.text ?? "?",
                   value: Int64($0["a"]?.double ?? 0),
@@ -488,11 +521,12 @@ public struct ReportEngine: Sendable {
     }
 
     /// Per-site totals with open-vs-active split.
-    public func attentionSitesDetailed() throws -> [Count] {
+    public func attentionSitesDetailed(sinceDays: Int = 0) throws -> [Count] {
         try db.query("""
             SELECT \(Self.hostSQL) h, SUM(active_s) a, SUM(ticks)*2.0 o,
                    COUNT(*) n
-            FROM focus WHERE url != '' GROUP BY h ORDER BY a DESC LIMIT 20
+            FROM focus WHERE url != ''\(focusAnd(sinceDays))
+            GROUP BY h ORDER BY a DESC LIMIT 20
         """).map {
             Count(label: $0["h"]?.text ?? "?",
                   value: Int64($0["a"]?.double ?? 0),
@@ -501,10 +535,11 @@ public struct ReportEngine: Sendable {
         }
     }
 
-    public func attentionSites() throws -> [Count] {
+    public func attentionSites(sinceDays: Int = 0) throws -> [Count] {
         try db.query("""
             SELECT \(Self.hostSQL) h, SUM(active_s) a FROM focus
-            WHERE url != '' GROUP BY h ORDER BY a DESC LIMIT 15
+            WHERE url != ''\(focusAnd(sinceDays))
+            GROUP BY h ORDER BY a DESC LIMIT 15
         """).map {
             Count(label: $0["h"]?.text ?? "?",
                   value: Int64($0["a"]?.double ?? 0))

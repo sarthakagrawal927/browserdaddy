@@ -8,6 +8,7 @@ struct AttentionView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                FilterBar(showSource: false)
                 now
                 timeline
                 appsAndSites

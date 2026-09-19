@@ -151,6 +151,62 @@ struct Sparkline: View {
     }
 }
 
+/// Shared filter controls — source + range, daddy-styled bordered menus.
+struct FilterBar: View {
+    @EnvironmentObject var model: AppModel
+    /// Focus data has no profile dimension — hide source on Attention.
+    var showSource = true
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if showSource { sourceMenu }
+            rangeMenu
+            if model.filterSource != "all" || model.filterDays != 0 {
+                Button("Clear filters") {
+                    model.filterSource = "all"
+                    model.filterDays = 0
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private var sourceMenu: some View {
+        Menu {
+            Button("all sources") { model.filterSource = "all" }
+            ForEach(model.report?.sources ?? [], id: \.name) { s in
+                Button(s.name) { model.filterSource = s.name }
+            }
+        } label: {
+            Label(model.filterSource == "all" ? "all sources" : model.filterSource,
+                  systemImage: "line.3.horizontal.decrease")
+                .padding(.horizontal, 10).padding(.vertical, 6)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .overlay(RoundedRectangle(cornerRadius: 6)
+            .stroke(BrowserTheme.mintInk.opacity(0.4), lineWidth: 1))
+    }
+
+    private var rangeMenu: some View {
+        Menu {
+            ForEach([(0, "all time"), (7, "last 7 days"), (30, "last 30 days"),
+                     (90, "last 90 days")], id: \.0) { d, label in
+                Button(label) { model.filterDays = d }
+            }
+        } label: {
+            Label(rangeLabel, systemImage: "calendar")
+                .padding(.horizontal, 10).padding(.vertical, 6)
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+        .overlay(RoundedRectangle(cornerRadius: 6)
+            .stroke(BrowserTheme.mintInk.opacity(0.4), lineWidth: 1))
+    }
+
+    private var rangeLabel: String {
+        model.filterDays == 0 ? "all time" : "last \(model.filterDays) days"
+    }
+}
+
 /// Proportional bar for ranked lists.
 struct ShareBar: View {
     let fraction: Double

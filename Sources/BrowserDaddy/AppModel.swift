@@ -29,6 +29,9 @@ final class AppModel: ObservableObject {
     @Published var attentionAppsDetail: [ReportEngine.Count] = []
     @Published var attentionSitesDetail: [ReportEngine.Count] = []
     @Published var attentionHourly = [Int64](repeating: 0, count: 24)
+    // analytics filters — applied across Dashboard + Attention
+    @Published var filterSource = "all" { didSet { Task { await reloadFiltered() } } }
+    @Published var filterDays = 0 { didSet { Task { await reloadFiltered() } } }
 
     let store: ArchiveStore
     let engine: ReportEngine
@@ -86,32 +89,41 @@ final class AppModel: ObservableObject {
 
     func reload() async {
         let engine = self.engine
+        let src = filterSource == "all" ? nil : filterSource
+        let days = filterDays
         let r = try? await Task.detached(priority: .utility) {
-            try engine.build()
+            try engine.build(source: src, sinceDays: days)
         }.value
         report = r
         browsers = (try? engine.browsers()) ?? []
         await search()
     }
 
+    /// Filter change → rebuild report + attention stats.
+    func reloadFiltered() async {
+        await reload()
+        reloadAttention()
+    }
+
     func reloadAttention() {
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
-            let apps = (try? self.engine.attentionApps()) ?? []
-            let sites = (try? self.engine.attentionSites()) ?? []
-            let appsDetail = (try? self.engine.attentionAppsDetailed()) ?? []
-            let sitesDetail = (try? self.engine.attentionSitesDetailed()) ?? []
-            let hourly = (try? self.engine.attentionHourly()) ?? []
-            let days = (try? self.engine.focusDays()) ?? []
+            let days = await MainActor.run { self.filterDays }
+            let apps = (try? self.engine.attentionApps(sinceDays: days)) ?? []
+            let sites = (try? self.engine.attentionSites(sinceDays: days)) ?? []
+            let appsDetail = (try? self.engine.attentionAppsDetailed(sinceDays: days)) ?? []
+            let sitesDetail = (try? self.engine.attentionSitesDetailed(sinceDays: days)) ?? []
+            let hourly = (try? self.engine.attentionHourly(sinceDays: days)) ?? []
+            let dayList = (try? self.engine.focusDays(sinceDays: days)) ?? []
             await MainActor.run {
                 self.report?.attentionApps = apps
                 self.report?.attentionSites = sites
                 self.attentionAppsDetail = appsDetail
                 self.attentionSitesDetail = sitesDetail
                 self.attentionHourly = hourly
-                self.focusDaysList = days
-                if self.focusDay.isEmpty {
-                    self.focusDay = days.first ?? ""
+                self.focusDaysList = dayList
+                if self.focusDay.isEmpty || !dayList.contains(self.focusDay) {
+                    self.focusDay = dayList.first ?? ""
                 }
             }
         }
