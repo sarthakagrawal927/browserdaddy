@@ -1,0 +1,93 @@
+{
+  "$schema": "fleet.design-review.v1",
+  "version": 1,
+  "project": "browserdaddy",
+  "target": "BrowserDaddy identity, mascot, icon, native shell and landing artwork",
+  "surfaceMode": "operate",
+  "mode": "overhaul",
+  "register": "brand",
+  "context": {
+    "product": "PRODUCT.md",
+    "design": "DESIGN.md"
+  },
+  "direction": {
+    "references": ["Owner-owned StorageDaddy mascot and existing Daddy family theme"],
+    "probes": [".fleet/brand-directions-v1.png", ".fleet/brand-directions.md"],
+    "selected": "",
+    "approval": "pending",
+    "before": "",
+    "library": {
+      "strategy": "upstream-first",
+      "primary": "native-swiftui",
+      "sources": [],
+      "runtime": "none",
+      "customReplacement": {
+        "used": false,
+        "authorization": "not-required",
+        "reason": ""
+      }
+    },
+    "contract": {
+      "purpose": "BrowserDaddy helps Mac users understand and revisit their browsing by combining a unified history archive with measured frontmost-app attention.",
+      "purposeSource": "PRODUCT.md and PROJECT_STATUS.md; native source verification",
+      "canonicalPurpose": "No purposeContract exists in the current generated project entry.",
+      "purposeAlignment": "repository-override",
+      "driftNote": "Canonical contract absent. Current tab privacy qualification restricts URL capture to normal Chrome windows; all other browsers are app-only. Native classifier policy remains owner-pending. Do not approve a landing until those boundaries and the catalog are reconciled.",
+      "audience": "Mac users reviewing their browsing history and attention",
+      "job": "Recognize BrowserDaddy distinctly while retaining the owner-approved Daddy family",
+      "thesis": "Browser-specific character and symbols, never the reused storage box",
+      "system": "Three pending systems are defined in brand-directions.md and the comparison board; no implementation selected.",
+      "signature": "A: tab scout and trail. B: bookmark archivist. C: focus-lens character.",
+      "risk": "Generated mockups are illustrative, not release evidence; actual native theme, accessibility and truthful copy require verification after selection."
+    }
+  },
+  "evidence": {
+    "screenshots": [],
+    "projectCheck": {
+      "command": "replace-with-project-check",
+      "status": "pending"
+    },
+    "critique": {
+      "score": 0,
+      "maximum": 40
+    },
+    "audit": {
+      "score": 0,
+      "maximum": 20
+    },
+    "unresolved": {
+      "p0": 0,
+      "p1": 0
+    },
+    "detector": {
+      "posture": "advisory",
+      "findings": []
+    },
+    "comprehension": {
+      "status": "not-applicable",
+      "reviewer": "",
+      "answers": {
+        "product": "",
+        "audience": "",
+        "value": "",
+        "mechanism": "",
+        "proof": "",
+        "nextAction": ""
+      },
+      "purposeScore": {
+        "product": 0,
+        "audience": 0,
+        "value": 0,
+        "mechanism": 0,
+        "proof": 0,
+        "nextAction": 0,
+        "total": 0
+      },
+      "mismatches": []
+    }
+  },
+  "ownerFeedback": {
+    "decision": "pending",
+    "note": "Owner requested proper branding and new art. Three visual systems presented; awaiting explicit selection. No branding implementation or deployment authorized by a selection yet."
+  }
+}

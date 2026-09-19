@@ -1,5 +1,24 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — bounded privacy fixes; release still blocked
+
+Collection now waits for onboarding completion and starts only once. Keyboard
+history sync cannot bypass onboarding. Chrome tab capture checks its immutable
+window mode before reading tab URL/title; unavailable/private captures immediately
+close the old URL segment. Other browsers remain app-only until their private
+window detection is qualified, and do not receive unnecessary automation probes.
+The report test now uses a synthetic temporary archive, never the user's real DB.
+All 15 Swift package tests pass, including onboarding, capture policy, persisted
+segment transitions and report fixtures. Chrome mode semantics were checked in
+the installed scripting dictionary; real private-window runtime acceptance is
+still outstanding. No personal archive was read for testing.
+
+Native release remains blocked: the optional external classifier conflicts with
+the written no-network policy, its disclosure omits transmitted paths, and opt-out
+does not cancel an in-flight batch. Owner asked to choose local-only or a qualified
+optional-network boundary. No app was signed, notarized, installed or released.
+New branding concepts are in `.fleet/brand-directions.md`; owner selection pending.
+
 ## Current state
 
 Native macOS app (SwiftUI + SwiftPM), forked from the storagedaddy/

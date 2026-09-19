@@ -53,8 +53,8 @@ struct OnboardingView: View {
             row(
                 ok: true,
                 title: "Browser automation",
-                body: "macOS asks once per browser so the watcher can read "
-                      + "the active tab's URL. Approve when prompted.",
+                body: "Chrome tab capture checks for a normal window before reading URLs. "
+                      + "Other browsers record app-level time only; private status is unverified.",
                 actionTitle: nil, action: nil)
         }
     }
@@ -65,7 +65,7 @@ struct OnboardingView: View {
                 .foregroundStyle(BrowserTheme.secondaryInk)
             Label("Archives history permanently — survives browser pruning.",
                   systemImage: "archivebox")
-            Label("Records focused app + tab while the app runs.",
+            Label("Records focused apps and verified normal Chrome tabs after you start.",
                   systemImage: "eye")
             Label("Private browsing is never reconstructed.",
                   systemImage: "hand.raised")

@@ -8,13 +8,12 @@ import Foundation
 /// continuous (app, url) span, with `active_s` counting only ticks where the
 /// machine wasn't idle.
 ///
-/// Port of the Python watch.py: same segment lifecycle, miss tolerance,
-/// gap-closing, and sub-tick blip dropping.
+/// Unknown/private tab state never carries forward a previous URL.
+/// Poll gaps close segments; sub-tick blips are dropped.
 public final class FocusWatcher: @unchecked Sendable {
     public static let interval: TimeInterval = 2.0
     public static let idleLimit: TimeInterval = 60
     public static let gapLimit: TimeInterval = 30
-    public static let missTolerance = 3
 
     /// bundleID → AppleScript application name.
     public static let scriptableBrowsers: [String: String] = [
@@ -28,14 +27,15 @@ public final class FocusWatcher: @unchecked Sendable {
         "com.apple.Safari": "Safari",
     ]
 
-    private static let isSafari: Set<String> = ["com.apple.Safari"]
+    public static var tabCapableBrowsers: [String: String] {
+        scriptableBrowsers.filter { tabScript(bundleID: $0.key) != nil }
+    }
 
     private let store: ArchiveStore
     private let queue = DispatchQueue(label: "browserdaddy.focus",
                                       qos: .utility)
     private var timer: DispatchSourceTimer?
     private var current: (id: Int64, app: String, url: String)?
-    private var misses = 0
     private var lastPoll = Date()
     public private(set) var isRunning = false
     /// Fires every poll with (frontmostApp, activeTabURL) — feeds "now" UI.
@@ -77,21 +77,17 @@ public final class FocusWatcher: @unchecked Sendable {
         let active = idleSeconds() < Self.idleLimit
 
         var url = "", title = ""
-        if let bundleID = front.bundleIdentifier,
-           let scriptName = Self.scriptableBrowsers[bundleID] {
-            (url, title) = browserTab(scriptName,
-                                      safari: Self.isSafari.contains(bundleID))
-            if url.isEmpty {
-                misses += 1
-                if let cur = current, cur.app == app,
-                   misses <= Self.missTolerance {
-                    bump(dt: active ? dt : 0)
-                    return  // transient grab failure — stay in segment
-                }
-            } else { misses = 0 }
-        } else {
-            misses = 0
+        if let bundleID = front.bundleIdentifier {
+            (url, title) = browserTab(bundleID)
         }
+        // An unavailable/private tab must close the previous URL immediately;
+        // carrying it over would attribute private browsing to a public page.
+        recordCapture(app: app, url: url, title: title, dt: dt, active: active)
+    }
+
+    /// Shared by native polling and fixture tests; never carries a missing URL forward.
+    func recordCapture(app: String, url: String, title: String,
+                       dt: TimeInterval, active: Bool) {
         transition(to: app, url: url, title: title, dt: dt, active: active)
         onTick?(app, url)
     }
@@ -147,21 +143,34 @@ public final class FocusWatcher: @unchecked Sendable {
             .combinedSessionState, eventType: anyInput)
     }
 
-    /// One AppleScript returning "url<US>title"; ("","") on any failure.
-    private func browserTab(_ app: String, safari: Bool) -> (String, String) {
-        let urlExpr = safari ? "URL of current tab of front window"
-                             : "URL of active tab of front window"
-        let titleExpr = safari ? "name of current tab of front window"
-                               : "title of active tab of front window"
-        let script = NSAppleScript(source: """
-            tell application "\(app)" to get \
-            (\(urlExpr)) & (ASCII character 31) & (\(titleExpr))
-        """)
+    /// Chrome's scripting dictionary exposes an immutable normal/incognito
+    /// window mode. Other browsers remain app-only until similarly qualified.
+    static func tabScript(bundleID: String) -> String? {
+        guard bundleID == "com.google.Chrome" else { return nil }
+        return """
+            tell application id "com.google.Chrome"
+                if (count of windows) is 0 then return ""
+                set captureWindow to front window
+                if (mode of captureWindow) is not "normal" then return ""
+                set captureTab to active tab of captureWindow
+                return (URL of captureTab) & (ASCII character 31) & (title of captureTab)
+            end tell
+            """
+    }
+
+    static func decodeTab(_ value: String?) -> (String, String) {
+        guard let str = value, let sep = str.range(of: "\u{1f}"),
+              !str[..<sep.lowerBound].isEmpty else { return ("", "") }
+        return (String(str[..<sep.lowerBound]), String(str[sep.upperBound...]))
+    }
+
+    /// No tab is queried when privacy status cannot be verified.
+    private func browserTab(_ bundleID: String) -> (String, String) {
+        guard let source = Self.tabScript(bundleID: bundleID) else { return ("", "") }
+        let script = NSAppleScript(source: source)
         var err: NSDictionary?
         let result = script?.executeAndReturnError(&err)
-        guard let str = result?.stringValue,
-              let sep = str.range(of: "\u{1f}") else { return ("", "") }
-        return (String(str[str.startIndex..<sep.lowerBound]),
-                String(str[sep.upperBound...]))
+        guard err == nil else { return ("", "") }
+        return Self.decodeTab(result?.stringValue)
     }
 }

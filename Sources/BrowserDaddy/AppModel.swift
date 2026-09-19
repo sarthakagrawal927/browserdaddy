@@ -47,17 +47,27 @@ final class AppModel: ObservableObject {
     let store: ArchiveStore
     let engine: ReportEngine
     let watcher: FocusWatcher
+    private var didStartCollection = false
+    private let startCollectionOverride: (() -> Void)?
 
-    init() {
-        store = try! ArchiveStore()
+    init(store suppliedStore: ArchiveStore? = nil,
+         startCollection: (() -> Void)? = nil) {
+        store = suppliedStore ?? (try! ArchiveStore())
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
+        startCollectionOverride = startCollection
         launchAtLogin = SMAppService.mainApp.status == .enabled
         needsOnboarding = store.metaGet("onboarded") != "1"
         classifyOptin = store.metaGet("classify_optin") == "1"
     }
 
     func boot() {
+        guard !needsOnboarding, !didStartCollection else { return }
+        didStartCollection = true
+        if let startCollectionOverride {
+            startCollectionOverride()
+            return
+        }
         refreshPermissions()
         watcher.onTick = { [weak self] app, url in
             Task { @MainActor in
@@ -90,7 +100,7 @@ final class AppModel: ObservableObject {
         Task.detached(priority: .utility) {
             let fda = Permissions.hasFullDiskAccess()
             var states: [String: Permissions.AutomationState] = [:]
-            for (_, scriptName) in FocusWatcher.scriptableBrowsers {
+            for (_, scriptName) in FocusWatcher.tabCapableBrowsers {
                 states[scriptName] = Permissions.automationState(for: scriptName)
             }
             await MainActor.run {
@@ -156,6 +166,7 @@ final class AppModel: ObservableObject {
     func finishOnboarding() {
         store.metaSet("onboarded", "1")
         needsOnboarding = false
+        boot()
     }
 
     /// Manual domain tag — persisted as source='user', survives tag runs.
@@ -212,7 +223,7 @@ final class AppModel: ObservableObject {
     }
 
     func runExtract() {
-        guard !extracting else { return }
+        guard !needsOnboarding, !extracting else { return }
         extracting = true
         extractLog = []
         let store = self.store

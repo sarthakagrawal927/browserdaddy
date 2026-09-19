@@ -46,9 +46,12 @@ struct PermissionsView: View {
 
     private var automation: some View {
         BrowserBand(label: "TABS",
-                    subtitle: "Per-browser Automation consent for active-tab URLs") {
+                    subtitle: "Chrome Automation consent for normal-window tab URLs") {
             VStack(alignment: .leading, spacing: 10) {
-                ForEach(FocusWatcher.scriptableBrowsers.values.sorted(),
+                Text("Tab URLs are captured only from verified normal Chrome windows. "
+                     + "Other browsers remain app-only until private-window detection is qualified.")
+                    .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
+                ForEach(FocusWatcher.tabCapableBrowsers.values.sorted(),
                         id: \.self) { name in
                     HStack {
                         Circle()
