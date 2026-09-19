@@ -44,14 +44,28 @@ public struct Classifier: Sendable {
             .compactMap { $0["host"]?.text })
         let newHosts = hosts.filter { !$0.isEmpty && !knownD.contains($0) }
         if !newHosts.isEmpty {
-            let pairs = try await classify(texts: newHosts,
+            // Enrich bare hostnames with their top page titles — thin
+            // inputs ("paddoxtechnologies.com") label poorly on their own.
+            var inputs: [String] = []
+            for h in newHosts {
+                let tops = try db.query("""
+                    SELECT MAX(title) t, COUNT(*) c FROM visits
+                    WHERE \(ReportEngine.hostSQL) = ? AND title != ''
+                    GROUP BY url ORDER BY c DESC LIMIT 3
+                """, [.text(h)])
+                let hint = tops.compactMap { $0["t"]?.text }
+                    .map { String($0.prefix(60)) }
+                    .joined(separator: " | ")
+                inputs.append("\(h) — \(hint.isEmpty ? h : String(hint.prefix(220)))")
+            }
+            let pairs = try await classify(texts: inputs,
                                    labels: Self.domainLabels, log: log)
             try db.transaction {
-                for p in pairs {
+                for (i, p) in pairs.enumerated() {
                     try db.execute("""
                         INSERT OR REPLACE INTO domain_categories
                         (host, category, confidence) VALUES (?,?,?)
-                    """, [.text(p.0), .text(p.1), .double(p.2)])
+                    """, [.text(newHosts[i]), .text(p.1), .double(p.2)])
                 }
             }
             out.domains = pairs.count
@@ -69,7 +83,9 @@ public struct Classifier: Sendable {
             guard let u = r["url"]?.text, !u.isEmpty, !knownP.contains(u),
                   let t = r["t"]?.text, !t.isEmpty else { return nil }
             let host = URL(string: u)?.host ?? u
-            return (u, "\(host) — \(t.prefix(160))")
+            let path = URL(string: u)?.path ?? ""
+            let pathHint = path.count > 1 ? " \(path.prefix(60))" : ""
+            return (u, "\(host)\(pathHint) — \(t.prefix(140))")
         }
         if !newPages.isEmpty {
             let pairs = try await classify(texts: newPages.map(\.1),
