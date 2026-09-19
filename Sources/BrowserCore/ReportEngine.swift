@@ -86,6 +86,21 @@ public struct ReportEngine: Sendable {
         public var longestGapDays: Int64 = 0
         public var sharedDomains: [(domain: String, sources: String, visits: Int64)] = []
         public var oneHitDomains: Int64 = 0     // domains visited exactly once
+        // trends wave 2
+        public var weeklySeries: [DayPoint] = []    // week × browser
+        public var noveltyWeekly: [Count] = []      // week → % visits to first-seen domains
+        public var moversUp: [Count] = []           // domains rising month-over-month
+        public var moversDown: [Count] = []
+        public var deepRead: [Count] = []           // site → active-minutes per visit
+        public var dayStarts: [Count] = []          // most common first-site of the day
+        public var dayEnds: [Count] = []            // most common last-site of the day
+        public var medianDayStart = ""              // "09:12" local
+        public var medianDayEnd = ""
+        public var habitual: [Count] = []           // domains on ≥80% of active days
+        public var returnGaps: [Count] = []         // domain → median hours between visits
+        public var nightShare: [Count] = []         // month → % visits 23:00–05:00
+        public var switchesPerFocusHour: Double = 0 // context-switch rate
+        public var medianSpanSeconds: Double = 0
     }
 
     /// `source` is "browser/profile"; `sinceDays` = 0 means all time.
@@ -104,6 +119,7 @@ public struct ReportEngine: Sendable {
         let vw = conds.isEmpty ? "" : " WHERE " + conds.joined(separator: " AND ")
         let va = conds.isEmpty ? "" : " AND " + conds.joined(separator: " AND ")
         let fw = sinceDays > 0 ? " WHERE start_utc >= '\(sinceISO)'" : ""
+        let fa = sinceDays > 0 ? " AND start_utc >= '\(sinceISO)'" : ""
         // searches has no timestamp — source filter only.
         let sw = source.map { " WHERE browser||'/'||profile = '"
             + $0.replacingOccurrences(of: "'", with: "''") + "'" } ?? ""
@@ -429,6 +445,199 @@ public struct ReportEngine: Sendable {
             (domain: $0["h"]?.text ?? "?",
              sources: $0["srcs"]?.text ?? "",
              visits: $0["c"]?.int ?? 0)
+        }
+
+        // ---- trends wave 2 ----
+
+        // Weekly volume per browser (Monday-start weeks).
+        r.weeklySeries = try db.query("""
+            SELECT date(visit_time_utc,'localtime','+1 day','weekday 1','-7 days') w,
+                   browser, COUNT(*) c
+            FROM visits\(vw) GROUP BY w, browser ORDER BY w
+        """).map {
+            DayPoint(date: $0["w"]?.text ?? "",
+                     browser: $0["browser"]?.text ?? "?",
+                     count: $0["c"]?.int ?? 0)
+        }
+
+        // Novelty: % of each week's visits to domains first seen that week.
+        r.noveltyWeekly = try db.query("""
+            WITH fs AS (
+              SELECT \(Self.hostSQL) h,
+                     MIN(date(visit_time_utc,'localtime','+1 day','weekday 1','-7 days')) fw
+              FROM visits GROUP BY h)
+            SELECT date(visit_time_utc,'localtime','+1 day','weekday 1','-7 days') w,
+                   ROUND(100.0*SUM(CASE WHEN fs.fw =
+                       date(visit_time_utc,'localtime','+1 day','weekday 1','-7 days')
+                       THEN 1 ELSE 0 END)/COUNT(*),1) p,
+                   COUNT(*) c
+            FROM visits JOIN fs ON fs.h = \(Self.hostSQL)\(va)
+            GROUP BY w ORDER BY w
+        """).map {
+            Count(label: $0["w"]?.text ?? "",
+                  value: Int64($0["p"]?.double ?? 0),
+                  extra: "\($0["c"]?.int ?? 0) visits")
+        }
+
+        // Movers: last full month vs the month before, per domain.
+        let monthlyByDomain = try db.query("""
+            SELECT \(Self.hostSQL) h,
+                   strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) c
+            FROM visits\(vw) GROUP BY h, m
+        """)
+        var perDom: [String: [String: Int64]] = [:]
+        var monthSet = Set<String>()
+        for row in monthlyByDomain {
+            let h = row["h"]?.text ?? "?", m = row["m"]?.text ?? ""
+            perDom[h, default: [:]][m] = row["c"]?.int ?? 0
+            monthSet.insert(m)
+        }
+        let monthsSorted = monthSet.sorted()
+        if monthsSorted.count >= 2 {
+            let cur = monthsSorted[monthsSorted.count - 1]
+            let prev = monthsSorted[monthsSorted.count - 2]
+            var deltas: [(String, Int64, Int64, Int64)] = []
+            for (h, mm) in perDom {
+                let c = mm[cur] ?? 0, p = mm[prev] ?? 0
+                if c + p >= 20 { deltas.append((h, c - p, c, p)) }
+            }
+            r.moversUp = deltas.filter { $0.1 > 0 }
+                .sorted { $0.1 > $1.1 }.prefix(8).map {
+                    Count(label: $0.0, value: $0.1,
+                          extra: "\($0.3) → \($0.2) (\(prev) → \(cur))")
+                }
+            r.moversDown = deltas.filter { $0.1 < 0 }
+                .sorted { $0.1 < $1.1 }.prefix(8).map {
+                    Count(label: $0.0, value: $0.1,
+                          extra: "\($0.3) → \($0.2) (\(prev) → \(cur))")
+                }
+        }
+
+        // Deep-read: active minutes per visit per site (focus ⨯ history).
+        var visitsByHost: [String: Int64] = [:]
+        for (h, c) in hostCounts { visitsByHost[h] = c }
+        var deep: [(String, Double)] = []
+        for row in try db.query("""
+            SELECT \(Self.hostSQL) h, SUM(active_s) a FROM focus
+            WHERE url != ''\(fa) GROUP BY h
+        """) {
+            let h = row["h"]?.text ?? "?"
+            let a = row["a"]?.double ?? 0
+            if let v = visitsByHost[h], v >= 5, a > 0 {
+                deep.append((h, a / 60 / Double(v)))
+            }
+        }
+        r.deepRead = deep.sorted { $0.1 > $1.1 }.prefix(10).map {
+            Count(label: $0.0, value: Int64($0.1 * 60),
+                  extra: String(format: "%.1f min active / visit", $0.1))
+        }
+
+        // Day edges: most common first/last site of each active day,
+        // and median start/end clock times.
+        let edges = try db.query("""
+            WITH d AS (
+              SELECT \(Self.hostSQL) h, visit_time_utc t,
+                     strftime('%Y-%m-%d',visit_time_utc,'localtime') day,
+                     ROW_NUMBER() OVER (PARTITION BY
+                       strftime('%Y-%m-%d',visit_time_utc,'localtime')
+                       ORDER BY visit_time_utc) rn,
+                     COUNT(*) OVER (PARTITION BY
+                       strftime('%Y-%m-%d',visit_time_utc,'localtime')) n
+              FROM visits\(vw))
+            SELECT h, SUM(rn=1) f, SUM(rn=n) l, COUNT(*) c FROM d
+            GROUP BY h
+        """)
+        r.dayStarts = edges.sorted {
+            ($0["f"]?.int ?? 0) > ($1["f"]?.int ?? 0)
+        }.prefix(8).map {
+            Count(label: $0["h"]?.text ?? "?", value: $0["f"]?.int ?? 0)
+        }.filter { $0.value > 0 }
+        r.dayEnds = edges.sorted {
+            ($0["l"]?.int ?? 0) > ($1["l"]?.int ?? 0)
+        }.prefix(8).map {
+            Count(label: $0["h"]?.text ?? "?", value: $0["l"]?.int ?? 0)
+        }.filter { $0.value > 0 }
+
+        let dayHours = try db.query("""
+            SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') day,
+                   MIN(strftime('%H:%M',visit_time_utc,'localtime')) s,
+                   MAX(strftime('%H:%M',visit_time_utc,'localtime')) e
+            FROM visits\(vw) GROUP BY day
+        """).map { ($0["s"]?.text ?? "00:00", $0["e"]?.text ?? "00:00") }
+        if !dayHours.isEmpty {
+            func medianStr(_ xs: [String]) -> String {
+                xs.sorted()[xs.count / 2]
+            }
+            r.medianDayStart = medianStr(dayHours.map { $0.0 })
+            r.medianDayEnd = medianStr(dayHours.map { $0.1 })
+        }
+
+        // Habitual: domains present on ≥80% of active days.
+        let activeDays = max(1, Set(r.dailySeries.map(\.date)).count)
+        r.habitual = try db.query("""
+            SELECT \(Self.hostSQL) h,
+                   COUNT(DISTINCT
+                     strftime('%Y-%m-%d',visit_time_utc,'localtime')) days,
+                   COUNT(*) c
+            FROM visits\(vw) GROUP BY h HAVING days >= ?
+            ORDER BY days DESC, c DESC LIMIT 10
+        """, [.int(Int64(Double(activeDays) * 0.8))]).map {
+            let days = $0["days"]?.int ?? 0
+            let pct = Int(100.0 * Double(days) / Double(activeDays))
+            return Count(label: $0["h"]?.text ?? "?", value: days,
+                         extra: "\($0["c"]?.int ?? 0) visits · \(pct)% of days")
+        }
+
+        // Return gap: median hours between consecutive visits, top domains.
+        let topHosts = Array(r.topDomains.prefix(8).map(\.label))
+        if !topHosts.isEmpty {
+            let ph = topHosts.map { "'\($0.replacingOccurrences(of: "'", with: "''"))'" }
+                .joined(separator: ",")
+            let gaps = try db.query("""
+                SELECT h, gap FROM (
+                  SELECT \(Self.hostSQL) h,
+                         julianday(visit_time_utc)
+                         - LAG(julianday(visit_time_utc)) OVER (
+                             PARTITION BY \(Self.hostSQL)
+                             ORDER BY visit_time_utc) gap
+                  FROM visits\(vw))
+                WHERE gap IS NOT NULL AND h IN (\(ph))
+            """)
+            var byHost: [String: [Double]] = [:]
+            for g in gaps {
+                byHost[g["h"]?.text ?? "?", default: []]
+                    .append((g["gap"]?.double ?? 0) * 24)
+            }
+            r.returnGaps = byHost.map { h, gs in
+                let s = gs.sorted()
+                return Count(label: h, value: Int64(s[s.count / 2] * 60),
+                             extra: String(format: "%.1fh median gap",
+                                           s[s.count / 2]))
+            }.sorted { $0.value < $1.value }
+        }
+
+        // Night-owl share per month (23:00–05:00 local).
+        r.nightShare = try db.query("""
+            SELECT strftime('%Y-%m',visit_time_utc,'localtime') m,
+                   ROUND(100.0*SUM(CASE WHEN
+                     CAST(strftime('%H',visit_time_utc,'localtime') AS INT)
+                     IN (23,0,1,2,3,4) THEN 1 ELSE 0 END)/COUNT(*),1) p
+            FROM visits\(vw) GROUP BY m ORDER BY m
+        """).map {
+            Count(label: $0["m"]?.text ?? "",
+                  value: Int64($0["p"]?.double ?? 0))
+        }
+
+        // Fragmentation: segments per focused hour + median span.
+        let spans = try db.query(
+            "SELECT active_s FROM focus\(fw) ORDER BY start_utc")
+            .map { $0["active_s"]?.double ?? 0 }
+        if !spans.isEmpty {
+            let tot = spans.reduce(0, +)
+            r.switchesPerFocusHour = tot > 0
+                ? Double(spans.count) / (tot / 3600) : 0
+            let s = spans.sorted()
+            r.medianSpanSeconds = s[s.count / 2]
         }
         return r
     }

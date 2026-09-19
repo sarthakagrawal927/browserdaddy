@@ -11,13 +11,18 @@ struct DashboardView: View {
                     FilterBar()
                     verdict(r)
                     timeline(r)
+                    movers(r)
                     trends(r)
                     sites(r)
+                    deepRead(r)
                     heatmap(r)
                     profiles(r)
                     days(r)
+                    dayEdges(r)
+                    habits(r)
                     depth(r)
                     shared(r)
+                    pace(r)
                     sessions(r)
                     searches(r)
                 }
@@ -64,8 +69,133 @@ struct DashboardView: View {
 
     private func timeline(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "TIMELINE",
-                    subtitle: "Visits per day, stacked by browser") {
-            DailyStackedBars(series: r.dailySeries)
+                    subtitle: "Visits per day (fine) and per week (trend), stacked by browser") {
+            VStack(alignment: .leading, spacing: 14) {
+                DailyStackedBars(series: r.dailySeries)
+                Divider().overlay(BrowserTheme.divider)
+                Text("WEEKLY").font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                DailyStackedBars(series: r.weeklySeries, height: 80)
+            }
+        }
+    }
+
+    // MARK: - movers
+
+    private func movers(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "MOVERS",
+                    subtitle: "Domains rising / falling vs last month") {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("RISING").font(.caption.weight(.semibold))
+                        .foregroundStyle(BrowserTheme.mintInk)
+                    ForEach(Array(r.moversUp.enumerated()), id: \.offset) { _, m in
+                        RankRow(value: "+\(m.value.formatted())",
+                                label: m.label, note: m.extra)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("FALLING").font(.caption.weight(.semibold))
+                        .foregroundStyle(BrowserTheme.coral)
+                    ForEach(Array(r.moversDown.enumerated()), id: \.offset) { _, m in
+                        RankRow(value: m.value.formatted(),
+                                label: m.label, note: m.extra)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - deep read
+
+    private func deepRead(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "DEEP READ",
+                    subtitle: "Focused minutes per visit — the sites you actually read vs. quick-hit") {
+            VStack(alignment: .leading, spacing: 8) {
+                if r.deepRead.isEmpty {
+                    Text("Needs both history and accumulated focus data.")
+                        .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
+                }
+                ForEach(Array(r.deepRead.enumerated()), id: \.offset) { _, d in
+                    RankRow(value: d.extra.replacingOccurrences(
+                                of: " min active / visit", with: "m"),
+                            label: d.label)
+                }
+            }
+        }
+    }
+
+    // MARK: - day edges
+
+    private func dayEdges(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "DAY EDGES",
+                    subtitle: "What starts and ends a browsing day · median \(r.medianDayStart)–\(r.medianDayEnd)") {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("OPENS WITH").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.dayStarts.enumerated()), id: \.offset) { _, d in
+                        RankRow(value: "\(d.value)×", label: d.label)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("CLOSES WITH").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.dayEnds.enumerated()), id: \.offset) { _, d in
+                        RankRow(value: "\(d.value)×", label: d.label)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - habits
+
+    private func habits(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "HABITS",
+                    subtitle: "Sites on ≥80% of active days · how fast you return") {
+            HStack(alignment: .top, spacing: 28) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("DAILY FIXTURES").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.habitual.enumerated()), id: \.offset) { _, h in
+                        RankRow(value: "\(h.value)d", label: h.label,
+                                note: h.extra)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("RETURN SPEED").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.returnGaps.enumerated()), id: \.offset) { _, g in
+                        RankRow(value: g.extra
+                                    .replacingOccurrences(of: " median gap",
+                                                          with: ""),
+                                label: g.label)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - pace
+
+    private func pace(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "PACE",
+                    subtitle: "Attention fragmentation — from live focus data") {
+            HStack(spacing: 28) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(format: "%.0f", r.switchesPerFocusHour))
+                        .font(.title2.bold()).foregroundStyle(BrowserTheme.amber)
+                    Text("app/site switches per focused hour")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(fmtDur(r.medianSpanSeconds))
+                        .font(.title2.bold()).foregroundStyle(BrowserTheme.mintInk)
+                    Text("median focused span")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -92,6 +222,20 @@ struct DashboardView: View {
                     labels: (r.newDomainsPerWeek.first?.label ?? "",
                              r.newDomainsPerWeek.last?.label ?? ""),
                     color: BrowserTheme.amber, kind: .count)
+            }
+            HStack(alignment: .top, spacing: 20) {
+                TrendLine(
+                    title: "Novelty — % visits to new domains / week",
+                    points: r.noveltyWeekly.map { Double($0.value) },
+                    labels: (r.noveltyWeekly.first?.label ?? "",
+                             r.noveltyWeekly.last?.label ?? ""),
+                    color: BrowserTheme.blue, kind: .count)
+                TrendLine(
+                    title: "Night-owl share / month (23–05)",
+                    points: r.nightShare.map { Double($0.value) },
+                    labels: (r.nightShare.first?.label ?? "",
+                             r.nightShare.last?.label ?? ""),
+                    color: BrowserTheme.coral, kind: .count)
             }
             if !r.domainTrends.isEmpty {
                 Divider().overlay(BrowserTheme.divider)
