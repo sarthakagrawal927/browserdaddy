@@ -47,18 +47,24 @@ struct BrowserBand<Content: View>: View {
     let label: String
     let subtitle: String
     @ViewBuilder let content: Content
+    @State private var collapsed = false
+    private var storeKey: String { "band-collapsed-\(label)" }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .top, spacing: 24) {
                 bandHeading.frame(width: 124, alignment: .leading)
-                Divider()
-                content.frame(maxWidth: .infinity, alignment: .leading)
+                if !collapsed {
+                    Divider()
+                    content.frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             VStack(alignment: .leading, spacing: 16) {
                 bandHeading
-                Divider()
-                content.frame(maxWidth: .infinity, alignment: .leading)
+                if !collapsed {
+                    Divider()
+                    content.frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
         .padding(24)
@@ -68,19 +74,35 @@ struct BrowserBand<Content: View>: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(BrowserTheme.divider, lineWidth: 1)
         }
+        .onAppear {
+            collapsed = UserDefaults.standard.bool(forKey: storeKey)
+        }
     }
 
     private var bandHeading: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(label)
-                .font(.headline)
-                .foregroundStyle(BrowserTheme.secondaryInk)
-                .accessibilityAddTraits(.isHeader)
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { collapsed.toggle() }
+            UserDefaults.standard.set(collapsed, forKey: storeKey)
+        } label: {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Image(systemName: collapsed ? "chevron.right"
+                                                : "chevron.down")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(BrowserTheme.mintInk)
+                    Text(label)
+                        .font(.headline)
+                        .foregroundStyle(BrowserTheme.secondaryInk)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 }
 
