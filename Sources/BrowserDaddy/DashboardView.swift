@@ -116,7 +116,7 @@ struct DashboardView: View {
 
     private func heatmap(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "HEATMAP",
-                    subtitle: "Visit density — weekday × hour (UTC)") {
+                    subtitle: "Visit density — weekday × hour (local time)") {
             ActivityHeatmap(cells: r.heatmap)
         }
     }

@@ -100,8 +100,8 @@ public struct ReportEngine: Sendable {
 
         r.sources = try db.query("""
             SELECT browser||'/'||profile src, COUNT(*) c,
-                   substr(MIN(visit_time_utc),1,10) f,
-                   substr(MAX(visit_time_utc),1,10) l
+                   strftime('%Y-%m-%d',MIN(visit_time_utc),'localtime') f,
+                   strftime('%Y-%m-%d',MAX(visit_time_utc),'localtime') l
             FROM visits GROUP BY 1 ORDER BY 2 DESC
         """).map {
             SourceSummary(name: $0["src"]?.text ?? "?",
@@ -111,7 +111,7 @@ public struct ReportEngine: Sendable {
         }
 
         let months = try db.query("""
-            SELECT substr(visit_time_utc,1,7) m, browser, COUNT(*) c
+            SELECT strftime('%Y-%m',visit_time_utc,'localtime') m, browser, COUNT(*) c
             FROM visits GROUP BY m, browser ORDER BY m, c DESC
         """)
         var byMonth: [String: [(String, Int64)]] = [:]
@@ -158,9 +158,9 @@ public struct ReportEngine: Sendable {
 
         r.personalities = try db.query("""
             SELECT browser||'/'||profile s, COUNT(*) c, COUNT(DISTINCT url) u,
-                   ROUND(100.0*SUM(CASE WHEN CAST(strftime('%w',visit_time_utc)
+                   ROUND(100.0*SUM(CASE WHEN CAST(strftime('%w',visit_time_utc,'localtime')
                          AS INT) IN (0,6) THEN 1 ELSE 0 END)/COUNT(*),1) we,
-                   ROUND(100.0*SUM(CASE WHEN CAST(strftime('%H',visit_time_utc)
+                   ROUND(100.0*SUM(CASE WHEN CAST(strftime('%H',visit_time_utc,'localtime')
                          AS INT) BETWEEN 18 AND 23 THEN 1 ELSE 0 END)/COUNT(*),1) ev
             FROM visits GROUP BY 1 ORDER BY 2 DESC
         """).map {
@@ -169,7 +169,7 @@ public struct ReportEngine: Sendable {
         }
 
         r.hourly = try db.query("""
-            SELECT CAST(strftime('%H', visit_time_utc) AS INT) h, COUNT(*) c
+            SELECT CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
             FROM visits GROUP BY h ORDER BY h
         """).map {
             Count(label: String(format: "%02d:00", $0["h"]?.int ?? 0),
@@ -177,14 +177,14 @@ public struct ReportEngine: Sendable {
         }
         let dnames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
         r.weekday = try db.query("""
-            SELECT strftime('%w', visit_time_utc) d, COUNT(*) c
+            SELECT strftime('%w',visit_time_utc,'localtime') d, COUNT(*) c
             FROM visits GROUP BY d ORDER BY d
         """).map {
             Count(label: dnames[Int($0["d"]?.text ?? "0") ?? 0],
                   value: $0["c"]?.int ?? 0)
         }
         r.daily = try db.query("""
-            SELECT substr(visit_time_utc,1,10) d, COUNT(*) c
+            SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, COUNT(*) c
             FROM visits GROUP BY d ORDER BY d DESC LIMIT 30
         """).reversed().map {
             Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0)
@@ -276,7 +276,7 @@ public struct ReportEngine: Sendable {
         // ---- time series ----
 
         r.dailySeries = try db.query("""
-            SELECT substr(visit_time_utc,1,10) d, browser, COUNT(*) c
+            SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, browser, COUNT(*) c
             FROM visits GROUP BY d, browser ORDER BY d
         """).map {
             DayPoint(date: $0["d"]?.text ?? "",
@@ -285,8 +285,8 @@ public struct ReportEngine: Sendable {
         }
 
         for row in try db.query("""
-            SELECT CAST(strftime('%w',visit_time_utc) AS INT) d,
-                   CAST(strftime('%H',visit_time_utc) AS INT) h, COUNT(*) c
+            SELECT CAST(strftime('%w',visit_time_utc,'localtime') AS INT) d,
+                   CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
             FROM visits GROUP BY d, h
         """) {
             let d = Int(row["d"]?.int ?? 0), h = Int(row["h"]?.int ?? 0)
@@ -296,7 +296,7 @@ public struct ReportEngine: Sendable {
         }
 
         r.focusDaily = try db.query("""
-            SELECT substr(start_utc,1,10) d, SUM(active_s) a, SUM(ticks) t
+            SELECT strftime('%Y-%m-%d',start_utc,'localtime') d, SUM(active_s) a, SUM(ticks) t
             FROM focus GROUP BY d ORDER BY d
         """).map {
             FocusDay(date: $0["d"]?.text ?? "",
@@ -307,7 +307,7 @@ public struct ReportEngine: Sendable {
         // First-seen month per domain → exploration rate + cumulative coverage.
         let firstSeen = try db.query("""
             SELECT fs m, COUNT(*) c FROM (
-              SELECT MIN(substr(visit_time_utc,1,7)) fs FROM visits
+              SELECT MIN(strftime('%Y-%m',visit_time_utc,'localtime')) fs FROM visits
               GROUP BY \(Self.hostSQL)) GROUP BY fs ORDER BY fs
         """).map {
             Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
@@ -322,7 +322,7 @@ public struct ReportEngine: Sendable {
         // Monthly trend for the top host-level domains.
         for dom in r.topDomains.prefix(6) {
             let rows = try db.query("""
-                SELECT substr(visit_time_utc,1,7) m, COUNT(*) c FROM visits
+                SELECT strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) c FROM visits
                 WHERE \(Self.hostSQL) = ? GROUP BY m ORDER BY m
             """, [.text(dom.label)])
             r.domainTrends.append((dom.label, rows.map {
@@ -336,7 +336,7 @@ public struct ReportEngine: Sendable {
         var ph: [String: [Int64]] = [:]
         for row in try db.query("""
             SELECT browser||'/'||profile s,
-                   CAST(strftime('%H',visit_time_utc) AS INT) h, COUNT(*) c
+                   CAST(strftime('%H',visit_time_utc,'localtime') AS INT) h, COUNT(*) c
             FROM visits GROUP BY s, h
         """) {
             let s = row["s"]?.text ?? "?", h = Int(row["h"]?.int ?? 0)
@@ -348,14 +348,14 @@ public struct ReportEngine: Sendable {
             .sorted { $0.0 < $1.0 }
 
         r.busiestDays = try db.query("""
-            SELECT substr(visit_time_utc,1,10) d, COUNT(*) c
+            SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, COUNT(*) c
             FROM visits GROUP BY d ORDER BY c DESC LIMIT 10
         """).map { Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0) }
 
         var dowSrc: [String: [Int64]] = [:]
         for row in try db.query("""
             SELECT browser||'/'||profile s,
-                   CAST(strftime('%w',visit_time_utc) AS INT) d, COUNT(*) c
+                   CAST(strftime('%w',visit_time_utc,'localtime') AS INT) d, COUNT(*) c
             FROM visits GROUP BY s, d
         """) {
             let s = row["s"]?.text ?? "?", d = Int(row["d"]?.int ?? 0)
@@ -439,7 +439,7 @@ public struct ReportEngine: Sendable {
     public func focusSegments(day: String) throws -> [FocusSegRow] {
         try db.query("""
             SELECT id, start_utc, end_utc, app, url, active_s, ticks
-            FROM focus WHERE substr(start_utc,1,10) = ? ORDER BY start_utc
+            FROM focus WHERE strftime('%Y-%m-%d',start_utc,'localtime') = ? ORDER BY start_utc
         """, [.text(day)]).map {
             FocusSegRow(id: $0["id"]?.int ?? 0,
                         start: ISO8601.parse($0["start_utc"]?.text ?? ""),
@@ -454,7 +454,7 @@ public struct ReportEngine: Sendable {
     /// Days that have focus data, newest first.
     public func focusDays() throws -> [String] {
         try db.query("""
-            SELECT substr(start_utc,1,10) d, SUM(active_s) a
+            SELECT strftime('%Y-%m-%d',start_utc,'localtime') d, SUM(active_s) a
             FROM focus GROUP BY d ORDER BY d DESC
         """).compactMap { $0["d"]?.text }
     }
@@ -463,7 +463,7 @@ public struct ReportEngine: Sendable {
     public func attentionHourly() throws -> [Int64] {
         var hours = Array(repeating: Int64(0), count: 24)
         for row in try db.query("""
-            SELECT CAST(strftime('%H', start_utc) AS INT) h,
+            SELECT CAST(strftime('%H',start_utc,'localtime') AS INT) h,
                    SUM(active_s) a FROM focus GROUP BY h
         """) {
             let h = Int(row["h"]?.int ?? 0)

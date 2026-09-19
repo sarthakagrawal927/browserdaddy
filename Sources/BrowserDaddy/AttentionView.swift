@@ -129,8 +129,7 @@ struct AttentionView: View {
 
         private static func position(start: Date, end: Date)
             -> (Double, Double) {
-            var cal = Calendar(identifier: .iso8601)
-            cal.timeZone = TimeZone(secondsFromGMT: 0)!
+            let cal = Calendar.current
             let sod = Double(
                 cal.component(.hour, from: start) * 3600
                 + cal.component(.minute, from: start) * 60
@@ -202,7 +201,7 @@ struct AttentionView: View {
 
     private var pattern: some View {
         BrowserBand(label: "PATTERN",
-                    subtitle: "When real attention happens (UTC)") {
+                    subtitle: "When real attention happens (local time)") {
             HStack(alignment: .bottom, spacing: 3) {
                 let hourly = model.attentionHourly
                 let mx = max(1, hourly.max() ?? 1)
