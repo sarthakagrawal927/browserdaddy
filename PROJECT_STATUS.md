@@ -1,5 +1,17 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — Tab Scout brand integration
+
+Owner delegated the choice after three visual systems. Tab Scout now owns the
+native compact mark, larger artwork and macOS icon, with independent copies in
+ios-landings. Existing black/mint controls and the Editorial landing are preserved.
+`scripts/build-icon.sh` regenerates native ICNS representations. Source assets
+were generated with the built-in image tool; no personal browsing screenshots
+were used. Landing inspected at 390, 768 and 1440px. Independent scoped reviews:
+36.7/40 visual (normalized), 18/20 technical, 92/100 landing comprehension;
+no branding P0/P1 found. This is not native release/privacy qualification.
+
+
 ## 2026-09-20 — bounded privacy fixes; release still blocked
 
 Collection now waits for onboarding completion and starts only once. Keyboard

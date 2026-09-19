@@ -48,7 +48,7 @@ struct DashboardView: View {
 
     private func verdict(_ r: ReportEngine.Report) -> some View {
         HStack(alignment: .top, spacing: 18) {
-            DaddyArtwork(topic: 1).frame(width: 52, height: 52)
+            DaddyArtwork(brand: true).frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 7) {
                 Text("\(r.totalVisits.formatted()) visits archived")
                     .font(.largeTitle.bold())

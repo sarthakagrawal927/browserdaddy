@@ -174,7 +174,7 @@ struct RootView: View {
 
     private var about: some View {
         VStack(spacing: 16) {
-            DaddyArtwork(brand: true).frame(width: 110, height: 110)
+            DaddyArtwork().frame(width: 110, height: 110)
             Text("browserdaddy")
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
             Text("Where your time on the web actually goes.")

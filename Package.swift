@@ -13,6 +13,7 @@ let package = Package(
         .executableTarget(
             name: "BrowserDaddy",
             dependencies: ["BrowserCore"],
+            exclude: ["Resources/StorageDaddy.png", "Resources/PageDoodles.png"],
             resources: [.process("Resources")]
         ),
         .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),

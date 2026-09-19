@@ -7,7 +7,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                DaddyArtwork(topic: 4).frame(width: 34, height: 34)
+                DaddyArtwork(brand: true).frame(width: 34, height: 34)
                 TextField("Search URLs and titles…", text: $model.searchTerm)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 9).frame(height: 30)
@@ -80,7 +80,7 @@ struct HistoryView: View {
     private var emptyState: some View {
         VStack(spacing: 18) {
             Spacer()
-            DaddyArtwork(topic: 7).frame(width: 72, height: 72)
+            DaddyArtwork().frame(width: 72, height: 72)
             Text(model.report == nil || model.report?.totalVisits == 0
                  ? "Nothing archived yet" : "No matches")
                 .font(.title2.bold()).foregroundStyle(BrowserTheme.ink)
