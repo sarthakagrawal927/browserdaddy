@@ -77,13 +77,17 @@ struct DashboardView: View {
 
     private func timeline(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "TIMELINE",
-                    subtitle: "Visits per day (fine) and per week (trend), stacked by browser") {
+                    subtitle: "Visits per bucket, stacked by browser") {
             VStack(alignment: .leading, spacing: 14) {
-                DailyStackedBars(series: r.dailySeries)
-                Divider().overlay(BrowserTheme.divider)
-                Text("WEEKLY").font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                DailyStackedBars(series: r.weeklySeries, height: 80)
+                Picker("granularity", selection: $model.granularity) {
+                    Text("Day").tag(0); Text("Week").tag(1); Text("Month").tag(2)
+                }
+                .pickerStyle(.segmented).frame(width: 220)
+                DailyStackedBars(
+                    series: model.granularity == 2 ? r.monthlySeries
+                          : model.granularity == 1 ? r.weeklySeries
+                          : r.dailySeries,
+                    height: model.granularity == 0 ? 140 : 100)
             }
         }
     }

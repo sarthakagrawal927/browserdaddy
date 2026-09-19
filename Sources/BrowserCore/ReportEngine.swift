@@ -88,6 +88,7 @@ public struct ReportEngine: Sendable {
         public var oneHitDomains: Int64 = 0     // domains visited exactly once
         // trends wave 2
         public var weeklySeries: [DayPoint] = []    // week × browser
+        public var monthlySeries: [DayPoint] = []   // month × browser
         public var noveltyWeekly: [Count] = []      // week → % visits to first-seen domains
         public var moversUp: [Count] = []           // domains rising month-over-month
         public var moversDown: [Count] = []
@@ -460,6 +461,15 @@ public struct ReportEngine: Sendable {
             FROM visits\(vw) GROUP BY w, browser ORDER BY w
         """).map {
             DayPoint(date: $0["w"]?.text ?? "",
+                     browser: $0["browser"]?.text ?? "?",
+                     count: $0["c"]?.int ?? 0)
+        }
+        r.monthlySeries = try db.query("""
+            SELECT strftime('%Y-%m',visit_time_utc,'localtime') m,
+                   browser, COUNT(*) c
+            FROM visits\(vw) GROUP BY m, browser ORDER BY m
+        """).map {
+            DayPoint(date: $0["m"]?.text ?? "",
                      browser: $0["browser"]?.text ?? "?",
                      count: $0["c"]?.int ?? 0)
         }

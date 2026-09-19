@@ -32,6 +32,8 @@ final class AppModel: ObservableObject {
     // analytics filters — applied across Dashboard + Attention
     @Published var filterSource = "all" { didSet { Task { await reloadFiltered() } } }
     @Published var filterDays = 0 { didSet { Task { await reloadFiltered() } } }
+    /// Timeline granularity: 0 day, 1 week, 2 month.
+    @Published var granularity = 0
 
     let store: ArchiveStore
     let engine: ReportEngine
