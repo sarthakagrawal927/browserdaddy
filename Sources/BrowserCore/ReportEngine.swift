@@ -75,6 +75,17 @@ public struct ReportEngine: Sendable {
         public var newDomainsPerWeek: [Count] = []
         public var cumulativeDomains: [Count] = []   // cumulative unique domains per month
         public var domainTrends: [(domain: String, monthly: [Count])] = []
+        // deeper analytics
+        public var profileHours: [(source: String, hours: [Int64])] = [] // 24 each
+        public var busiestDays: [Count] = []
+        public var dowBySource: [(source: String, days: [Int64])] = []   // 7 each
+        public var top10Share: Double = 0       // % of visits in top 10 domains
+        public var top100Share: Double = 0
+        public var medianVisitsPerDay: Int64 = 0
+        public var longestStreak: Int64 = 0     // consecutive days with visits
+        public var longestGapDays: Int64 = 0
+        public var sharedDomains: [(domain: String, sources: String, visits: Int64)] = []
+        public var oneHitDomains: Int64 = 0     // domains visited exactly once
     }
 
     public func build() throws -> Report {
@@ -317,6 +328,88 @@ public struct ReportEngine: Sendable {
             r.domainTrends.append((dom.label, rows.map {
                 Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
             }))
+        }
+
+        // ---- deeper analytics ----
+
+        // Per-source hourly curves (for normalized profile comparison).
+        var ph: [String: [Int64]] = [:]
+        for row in try db.query("""
+            SELECT browser||'/'||profile s,
+                   CAST(strftime('%H',visit_time_utc) AS INT) h, COUNT(*) c
+            FROM visits GROUP BY s, h
+        """) {
+            let s = row["s"]?.text ?? "?", h = Int(row["h"]?.int ?? 0)
+            if (0...23).contains(h) {
+                ph[s, default: Array(repeating: 0, count: 24)][h] = row["c"]?.int ?? 0
+            }
+        }
+        r.profileHours = ph.map { ($0.key, $0.value) }
+            .sorted { $0.0 < $1.0 }
+
+        r.busiestDays = try db.query("""
+            SELECT substr(visit_time_utc,1,10) d, COUNT(*) c
+            FROM visits GROUP BY d ORDER BY c DESC LIMIT 10
+        """).map { Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0) }
+
+        var dowSrc: [String: [Int64]] = [:]
+        for row in try db.query("""
+            SELECT browser||'/'||profile s,
+                   CAST(strftime('%w',visit_time_utc) AS INT) d, COUNT(*) c
+            FROM visits GROUP BY s, d
+        """) {
+            let s = row["s"]?.text ?? "?", d = Int(row["d"]?.int ?? 0)
+            if (0...6).contains(d) {
+                dowSrc[s, default: Array(repeating: 0, count: 7)][d] = row["c"]?.int ?? 0
+            }
+        }
+        r.dowBySource = dowSrc.map { ($0.key, $0.value) }.sorted { $0.0 < $1.0 }
+
+        // Concentration: share of visits in top-10 / top-100 domains.
+        if r.totalVisits > 0 {
+            let sorted = hostCounts.map(\.1).sorted(by: >)
+            r.top10Share = Double(sorted.prefix(10).reduce(0, +))
+                / Double(r.totalVisits) * 100
+            r.top100Share = Double(sorted.prefix(100).reduce(0, +))
+                / Double(r.totalVisits) * 100
+            r.oneHitDomains = Int64(sorted.filter { $0 == 1 }.count)
+        }
+
+        // Day-level stats from the daily series.
+        let dayTotals = r.dailySeries.reduce(into: [String: Int64]()) {
+            $0[$1.date, default: 0] += $1.count
+        }.sorted { $0.key < $1.key }
+        if !dayTotals.isEmpty {
+            let counts = dayTotals.map(\.value).sorted()
+            r.medianVisitsPerDay = counts[counts.count / 2]
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy-MM-dd"
+            fmt.timeZone = TimeZone(identifier: "UTC")
+            var streak: Int64 = 1, prev: Date? = nil
+            var gap: Int64 = 0
+            for (d, _) in dayTotals {
+                guard let date = fmt.date(from: d) else { continue }
+                if let p = prev {
+                    let diff = Int64(date.timeIntervalSince(p) / 86400)
+                    streak = diff == 1 ? streak + 1 : 1
+                    r.longestStreak = max(r.longestStreak, streak)
+                    gap = max(gap, diff - 1)
+                }
+                prev = date
+            }
+            r.longestGapDays = gap
+        }
+
+        // Domains used in more than one browser/profile.
+        r.sharedDomains = try db.query("""
+            SELECT \(Self.hostSQL) h, COUNT(DISTINCT browser||'/'||profile) n,
+                   GROUP_CONCAT(DISTINCT browser) srcs, COUNT(*) c
+            FROM visits GROUP BY h HAVING n > 1
+            ORDER BY c DESC LIMIT 15
+        """).map {
+            (domain: $0["h"]?.text ?? "?",
+             sources: $0["srcs"]?.text ?? "",
+             visits: $0["c"]?.int ?? 0)
         }
         return r
     }

@@ -15,6 +15,9 @@ struct DashboardView: View {
                     sites(r)
                     heatmap(r)
                     profiles(r)
+                    days(r)
+                    depth(r)
+                    shared(r)
                     sessions(r)
                     searches(r)
                 }
@@ -177,25 +180,151 @@ struct DashboardView: View {
 
     private func profiles(_ r: ReportEngine.Report) -> some View {
         BrowserBand(label: "PROFILES",
-                    subtitle: "Each browser/profile has a job") {
-            VStack(alignment: .leading, spacing: 10) {
+                    subtitle: "Each browser/profile has a job — and a rhythm") {
+            VStack(alignment: .leading, spacing: 12) {
                 ForEach(r.personalities, id: \.label) { p in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(p.label).font(.callout.weight(.medium))
-                            .foregroundStyle(BrowserTheme.ink)
-                            .frame(minWidth: 140, alignment: .leading)
+                    HStack(alignment: .center, spacing: 14) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(p.label).font(.callout.weight(.medium))
+                                .foregroundStyle(BrowserTheme.ink)
+                            Text(p.extra).font(.caption2)
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        .frame(width: 200, alignment: .leading)
+                        if let ph = r.profileHours.first(
+                            where: { $0.source == p.label }) {
+                            let mx = max(1, ph.hours.max() ?? 1)
+                            Sparkline(values: ph.hours.map {
+                                Double($0) / Double(mx) },
+                                      color: BrowserTheme.cyan)
+                                .frame(height: 26)
+                        }
                         Text(p.value.formatted())
-                            .font(.callout.monospacedDigit())
+                            .font(.callout.monospacedDigit().bold())
                             .foregroundStyle(BrowserTheme.mintInk)
-                        Spacer()
-                        Text(p.extra).font(.caption)
-                            .foregroundStyle(.secondary).lineLimit(1)
+                            .frame(width: 70, alignment: .trailing)
                     }
                 }
                 Divider().overlay(BrowserTheme.divider)
                 ForEach(r.sources, id: \.name) { s in
                     RankRow(value: s.visits.formatted(), label: s.name,
                             note: "\(s.first) → \(s.last)")
+                }
+            }
+        }
+    }
+
+    // MARK: - days
+
+    private func days(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "DAYS",
+                    subtitle: "Day-of-week by source · busiest days · streaks") {
+            VStack(alignment: .leading, spacing: 16) {
+                // dow × source matrix
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 0) {
+                        Text("").frame(width: 140, alignment: .leading)
+                        ForEach(["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],
+                                id: \.self) { d in
+                            Text(d).font(.caption2.weight(.semibold))
+                                .foregroundStyle(BrowserTheme.secondaryInk)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    ForEach(Array(r.dowBySource.enumerated()), id: \.offset) { _, s in
+                        let mx = max(1, s.days.max() ?? 1)
+                        HStack(spacing: 0) {
+                            Text(s.source).font(.caption)
+                                .foregroundStyle(BrowserTheme.ink)
+                                .frame(width: 140, alignment: .leading)
+                            ForEach(0..<7, id: \.self) { d in
+                                let v = Double(s.days[d]) / Double(mx)
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(BrowserTheme.mintInk
+                                        .opacity(v < 0.02 ? 0.08
+                                                 : 0.15 + v * 0.85))
+                                    .frame(height: 14)
+                                    .frame(maxWidth: .infinity)
+                                    .help("\(s.source) \(d): \(s.days[d])")
+                            }
+                        }
+                    }
+                }
+                Divider().overlay(BrowserTheme.divider)
+                HStack(alignment: .top, spacing: 28) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("BUSIEST DAYS").font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(Array(r.busiestDays.prefix(8).enumerated()),
+                                id: \.offset) { _, d in
+                            RankRow(value: d.value.formatted(), label: d.label)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("CONSISTENCY").font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        RankRow(value: "\(r.longestStreak)d",
+                                label: "longest daily streak")
+                        RankRow(value: r.medianVisitsPerDay.formatted(),
+                                label: "median visits/day")
+                        RankRow(value: "\(r.longestGapDays)d",
+                                label: "longest gap (no visits)")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+    }
+
+    // MARK: - depth
+
+    private func depth(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "DEPTH",
+                    subtitle: "Concentration — how much of browsing is a few sites") {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(spacing: 28) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(String(format: "%.0f%%", r.top10Share))
+                            .font(.title2.bold())
+                            .foregroundStyle(BrowserTheme.mintInk)
+                        Text("of visits go to your top 10 domains")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(String(format: "%.0f%%", r.top100Share))
+                            .font(.title2.bold())
+                            .foregroundStyle(BrowserTheme.cyan)
+                        Text("in top 100 — the long tail is huge")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(r.oneHitDomains.formatted())
+                            .font(.title2.bold())
+                            .foregroundStyle(BrowserTheme.amber)
+                        Text("domains visited exactly once")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Divider().overlay(BrowserTheme.divider)
+                Text("REVISIT DEPTH").font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(r.habit, id: \.label) { h in
+                    RankRow(value: h.value.formatted(), label: h.label)
+                }
+            }
+        }
+    }
+
+    // MARK: - shared
+
+    private func shared(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "SHARED",
+                    subtitle: "Domains alive in more than one browser/profile") {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(r.sharedDomains.enumerated()), id: \.offset) { _, s in
+                    RankRow(value: s.visits.formatted(), label: s.domain,
+                            note: s.sources)
                 }
             }
         }
