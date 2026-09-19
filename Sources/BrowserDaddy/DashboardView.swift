@@ -9,9 +9,11 @@ struct DashboardView: View {
             if let r = model.report, r.totalVisits > 0 {
                 VStack(spacing: 16) {
                     verdict(r)
+                    timeline(r)
                     attention(r)
+                    trends(r)
                     sites(r)
-                    rhythm(r)
+                    heatmap(r)
                     profiles(r)
                     sessions(r)
                     searches(r)
@@ -53,6 +55,68 @@ struct DashboardView: View {
         let f = r.sources.map(\.first).min() ?? "—"
         let l = r.sources.map(\.last).max() ?? "—"
         return "\(f) → \(l) · survives browser pruning"
+    }
+
+    // MARK: - timeline
+
+    private func timeline(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "TIMELINE",
+                    subtitle: "Visits per day, stacked by browser") {
+            DailyStackedBars(series: r.dailySeries)
+        }
+    }
+
+    // MARK: - trends
+
+    private func trends(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "TRENDS",
+                    subtitle: "Focus per day · archive growth · top-site momentum") {
+            HStack(alignment: .top, spacing: 20) {
+                TrendLine(
+                    title: "Focused time / day",
+                    points: r.focusDaily.map(\.activeSeconds),
+                    labels: (r.focusDaily.first?.date ?? "",
+                             r.focusDaily.last?.date ?? ""))
+                TrendLine(
+                    title: "Unique domains (cumulative)",
+                    points: r.cumulativeDomains.map { Double($0.value) },
+                    labels: (r.cumulativeDomains.first?.label ?? "",
+                             r.cumulativeDomains.last?.label ?? ""),
+                    color: BrowserTheme.cyan, kind: .count)
+                TrendLine(
+                    title: "New domains / month",
+                    points: r.newDomainsPerWeek.map { Double($0.value) },
+                    labels: (r.newDomainsPerWeek.first?.label ?? "",
+                             r.newDomainsPerWeek.last?.label ?? ""),
+                    color: BrowserTheme.amber, kind: .count)
+            }
+            if !r.domainTrends.isEmpty {
+                Divider().overlay(BrowserTheme.divider)
+                ForEach(Array(r.domainTrends.enumerated()), id: \.offset) { _, t in
+                    HStack(spacing: 14) {
+                        Text(t.domain).font(.callout)
+                            .foregroundStyle(BrowserTheme.ink)
+                            .frame(width: 160, alignment: .leading)
+                        Sparkline(values: t.monthly.map { Double($0.value) },
+                                  color: BrowserTheme.mintInk)
+                            .frame(height: 26)
+                        Text(t.monthly.last.map { "\($0.value.formatted())" } ?? "—")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(BrowserTheme.secondaryInk)
+                            .frame(width: 60, alignment: .trailing)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - heatmap
+
+    private func heatmap(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "HEATMAP",
+                    subtitle: "Visit density — weekday × hour (UTC)") {
+            ActivityHeatmap(cells: r.heatmap)
+        }
     }
 
     // MARK: - attention
@@ -103,43 +167,6 @@ struct DashboardView: View {
                         RankRow(value: s.value.formatted(), label: s.label)
                         ShareBar(fraction: Double(s.value) / Double(mx))
                             .frame(height: 3)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - rhythm
-
-    private func rhythm(_ r: ReportEngine.Report) -> some View {
-        BrowserBand(label: "RHYTHM",
-                    subtitle: "When browsing happens — UTC hours") {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .bottom, spacing: 3) {
-                    let mx = max(1, r.hourly.map(\.value).max() ?? 1)
-                    ForEach(Array(r.hourly.enumerated()), id: \.offset) { _, h in
-                        VStack(spacing: 3) {
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(BrowserTheme.mintInk)
-                                .frame(height: max(2, CGFloat(h.value)
-                                    / CGFloat(mx) * 64))
-                            Text(h.label).font(.system(size: 6))
-                                .foregroundStyle(BrowserTheme.secondaryInk)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(height: 80)
-                HStack(spacing: 12) {
-                    ForEach(r.weekday, id: \.label) { d in
-                        VStack(spacing: 4) {
-                            Text(d.label).font(.caption)
-                                .foregroundStyle(BrowserTheme.secondaryInk)
-                            Text(d.value.formatted())
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(BrowserTheme.ink)
-                        }
-                        .frame(maxWidth: .infinity)
                     }
                 }
             }

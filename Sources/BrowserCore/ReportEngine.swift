@@ -35,6 +35,18 @@ public struct ReportEngine: Sendable {
         public var start: Date
     }
 
+    public struct DayPoint: Sendable {
+        public var date: String     // yyyy-MM-dd
+        public var browser: String
+        public var count: Int64
+    }
+
+    public struct FocusDay: Sendable {
+        public var date: String
+        public var activeSeconds: Double
+        public var ticks: Int64
+    }
+
     public struct Report: Sendable {
         public var totalVisits: Int64 = 0
         public var uniqueURLs: Int64 = 0
@@ -56,6 +68,13 @@ public struct ReportEngine: Sendable {
         public var attentionApps: [Count] = []
         public var attentionSites: [Count] = []
         public var searches: [Count] = []
+        // time series
+        public var dailySeries: [DayPoint] = []      // day × browser counts
+        public var heatmap: [Int64] = Array(repeating: 0, count: 7 * 24) // dow*24+hour
+        public var focusDaily: [FocusDay] = []
+        public var newDomainsPerWeek: [Count] = []
+        public var cumulativeDomains: [Count] = []   // cumulative unique domains per month
+        public var domainTrends: [(domain: String, monthly: [Count])] = []
     }
 
     public func build() throws -> Report {
@@ -241,6 +260,63 @@ public struct ReportEngine: Sendable {
             GROUP BY lower(term) ORDER BY c DESC LIMIT 15
         """).map {
             Count(label: $0["term"]?.text ?? "?", value: $0["c"]?.int ?? 0)
+        }
+
+        // ---- time series ----
+
+        r.dailySeries = try db.query("""
+            SELECT substr(visit_time_utc,1,10) d, browser, COUNT(*) c
+            FROM visits GROUP BY d, browser ORDER BY d
+        """).map {
+            DayPoint(date: $0["d"]?.text ?? "",
+                     browser: $0["browser"]?.text ?? "?",
+                     count: $0["c"]?.int ?? 0)
+        }
+
+        for row in try db.query("""
+            SELECT CAST(strftime('%w',visit_time_utc) AS INT) d,
+                   CAST(strftime('%H',visit_time_utc) AS INT) h, COUNT(*) c
+            FROM visits GROUP BY d, h
+        """) {
+            let d = Int(row["d"]?.int ?? 0), h = Int(row["h"]?.int ?? 0)
+            if (0...6).contains(d), (0...23).contains(h) {
+                r.heatmap[d * 24 + h] = row["c"]?.int ?? 0
+            }
+        }
+
+        r.focusDaily = try db.query("""
+            SELECT substr(start_utc,1,10) d, SUM(active_s) a, SUM(ticks) t
+            FROM focus GROUP BY d ORDER BY d
+        """).map {
+            FocusDay(date: $0["d"]?.text ?? "",
+                     activeSeconds: $0["a"]?.double ?? 0,
+                     ticks: $0["t"]?.int ?? 0)
+        }
+
+        // First-seen month per domain → exploration rate + cumulative coverage.
+        let firstSeen = try db.query("""
+            SELECT fs m, COUNT(*) c FROM (
+              SELECT MIN(substr(visit_time_utc,1,7)) fs FROM visits
+              GROUP BY \(Self.hostSQL)) GROUP BY fs ORDER BY fs
+        """).map {
+            Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
+        }
+        r.newDomainsPerWeek = firstSeen
+        var running: Int64 = 0
+        r.cumulativeDomains = firstSeen.map {
+            running += $0.value
+            return Count(label: $0.label, value: running)
+        }
+
+        // Monthly trend for the top host-level domains.
+        for dom in r.topDomains.prefix(6) {
+            let rows = try db.query("""
+                SELECT substr(visit_time_utc,1,7) m, COUNT(*) c FROM visits
+                WHERE \(Self.hostSQL) = ? GROUP BY m ORDER BY m
+            """, [.text(dom.label)])
+            r.domainTrends.append((dom.label, rows.map {
+                Count(label: $0["m"]?.text ?? "", value: $0["c"]?.int ?? 0)
+            }))
         }
         return r
     }
