@@ -45,6 +45,12 @@ public final class ArchiveStore: @unchecked Sendable {
         try db.execute("""
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)
         """)
+        // Populated by scripts/classify-domains.sh — the app never calls
+        // the classifier itself; local-only boundary stays intact.
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS domain_categories (
+                host TEXT PRIMARY KEY, category TEXT, confidence REAL)
+        """)
     }
 
     /// INSERT OR IGNORE; returns count actually inserted.

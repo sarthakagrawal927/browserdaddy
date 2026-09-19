@@ -101,6 +101,10 @@ public struct ReportEngine: Sendable {
         public var nightShare: [Count] = []         // month → % visits 23:00–05:00
         public var switchesPerFocusHour: Double = 0 // context-switch rate
         public var medianSpanSeconds: Double = 0
+        // classifier.dev categories
+        public var categories: [Count] = []         // category → visits
+        public var categoryTopDomains: [(category: String, domains: [Count])] = []
+        public var categoryTrends: [(category: String, monthly: [Count])] = []
     }
 
     /// `source` is "browser/profile"; `sinceDays` = 0 means all time.
@@ -638,6 +642,52 @@ public struct ReportEngine: Sendable {
                 ? Double(spans.count) / (tot / 3600) : 0
             let s = spans.sorted()
             r.medianSpanSeconds = s[s.count / 2]
+        }
+
+        // ---- categories (classifier.dev, batch-imported) ----
+
+        r.categories = try db.query("""
+            SELECT COALESCE(c.category,'unclassified') cat, COUNT(*) n
+            FROM visits LEFT JOIN domain_categories c
+                 ON c.host = \(Self.hostSQL)\(vw)
+            GROUP BY cat ORDER BY n DESC
+        """).map {
+            Count(label: $0["cat"]?.text ?? "?", value: $0["n"]?.int ?? 0)
+        }
+
+        // Top domains within each category (top 3 shown).
+        let perCat = try db.query("""
+            SELECT COALESCE(c.category,'unclassified') cat,
+                   \(Self.hostSQL) h, COUNT(*) n
+            FROM visits LEFT JOIN domain_categories c
+                 ON c.host = \(Self.hostSQL)\(vw)
+            GROUP BY cat, h ORDER BY cat, n DESC
+        """)
+        var catMap: [String: [Count]] = [:]
+        for row in perCat {
+            let cat = row["cat"]?.text ?? "?"
+            catMap[cat, default: []].append(
+                Count(label: row["h"]?.text ?? "?",
+                      value: row["n"]?.int ?? 0))
+        }
+        r.categoryTopDomains = catMap.map { ($0.key, Array($0.value.prefix(3))) }
+
+        // Monthly trend for the top 5 categories.
+        let catMonthly = try db.query("""
+            SELECT COALESCE(c.category,'unclassified') cat,
+                   strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) n
+            FROM visits LEFT JOIN domain_categories c
+                 ON c.host = \(Self.hostSQL)\(vw)
+            GROUP BY cat, m ORDER BY m
+        """)
+        var catSeries: [String: [Count]] = [:]
+        for row in catMonthly {
+            catSeries[row["cat"]?.text ?? "?", default: []].append(
+                Count(label: row["m"]?.text ?? "",
+                      value: row["n"]?.int ?? 0))
+        }
+        r.categoryTrends = r.categories.prefix(5).compactMap { c in
+            catSeries[c.label].map { (c.label, $0) }
         }
         return r
     }

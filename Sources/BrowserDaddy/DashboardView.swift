@@ -13,6 +13,7 @@ struct DashboardView: View {
                     timeline(r)
                     movers(r)
                     trends(r)
+                    categories(r)
                     sites(r)
                     deepRead(r)
                     heatmap(r)
@@ -103,6 +104,74 @@ struct DashboardView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - categories
+
+    private func categories(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "CATEGORIES",
+                    subtitle: "classifier.dev batch grouping — what browsing is actually for") {
+            VStack(alignment: .leading, spacing: 10) {
+                let mx = max(1, r.categories.map(\.value).max() ?? 1)
+                ForEach(Array(r.categories.prefix(12).enumerated()),
+                        id: \.offset) { _, c in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(c.value.formatted())
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(catColor(c.label))
+                                .frame(minWidth: 62, alignment: .trailing)
+                            Text(c.label).foregroundStyle(BrowserTheme.ink)
+                            Text(String(format: "%.0f%%",
+                                        100.0 * Double(c.value)
+                                        / Double(r.totalVisits)))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Text(topIn(r, c.label)).font(.caption)
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        ShareBar(fraction: Double(c.value) / Double(mx),
+                                 color: catColor(c.label)).frame(height: 4)
+                    }
+                }
+                if !r.categoryTrends.isEmpty {
+                    Divider().overlay(BrowserTheme.divider)
+                    Text("MONTHLY").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.categoryTrends.enumerated()), id: \.offset) { _, t in
+                        HStack(spacing: 14) {
+                            Text(t.category).font(.callout)
+                                .foregroundStyle(catColor(t.category))
+                                .frame(width: 130, alignment: .leading)
+                            Sparkline(values: t.monthly.map { Double($0.value) },
+                                      color: catColor(t.category))
+                                .frame(height: 26)
+                            Text(t.monthly.last.map { $0.value.formatted() } ?? "—")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(BrowserTheme.secondaryInk)
+                                .frame(width: 60, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func topIn(_ r: ReportEngine.Report, _ cat: String) -> String {
+        r.categoryTopDomains.first { $0.category == cat }?.domains
+            .map(\.label).joined(separator: ", ") ?? ""
+    }
+
+    private func catColor(_ c: String) -> Color {
+        switch c {
+        case "development": BrowserTheme.mintInk
+        case "ai-tools": BrowserTheme.cyan
+        case "social-media": BrowserTheme.blue
+        case "video", "entertainment", "music", "gaming": BrowserTheme.coral
+        case "finance", "shopping": BrowserTheme.amber
+        case "search", "documentation", "education": BrowserTheme.secondaryInk
+        default: BrowserTheme.secondaryInk.opacity(0.7)
         }
     }
 
