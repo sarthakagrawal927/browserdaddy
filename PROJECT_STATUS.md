@@ -1,5 +1,30 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — signed native candidate and corrected optional consent
+
+Owner approved optional external classification with accurate, revocable consent.
+Consent v2 discloses hostnames, truncated titles and paths, network-address exposure,
+and that sent data cannot be recalled. Requests are not described as anonymous.
+Legacy opt-ins require renewal; revocation cancels the retained task and prevents
+remaining requests. Response shape/label/confidence validation fails closed, including
+extra/missing result counts. URL credentials/query/fragment are excluded from URL
+hints; the remaining text may still contain personal information. Local features
+remain independent. A failed archive open now shows recovery guidance instead of
+force-crashing. Twenty-two synthetic tests pass; no real classification request was made.
+
+Universal 0.1.0 build 2 targets macOS 14 (both Mach-O slices verified), uses the
+Tab Scout icon and stable `com.significanthobbies.browserdaddy` release identity,
+and is Developer ID signed with hardened runtime and the Apple Events entitlement.
+Apple notarization `bfe584c6-13cf-4b44-8622-49152ce6f564` was Accepted. App and DMG
+stapling and Gatekeeper checks passed. Installed app signature/ticket verified;
+native launch returned PID 65420 and the process remained running on follow-up.
+The old development app bundle is preserved under `.build/pre-release-app-backup-20260920/`.
+No archive was deleted/replaced, permission grants approved, or personal screenshots taken.
+
+This is a native prerelease candidate, not a fully qualified public release.
+Real private-window exclusion and new-identity permission-flow acceptance remain;
+no public landing download is enabled. Tracking: GitHub issue #3.
+
 ## 2026-09-20 — Tab Scout brand integration
 
 Owner delegated the choice after three visual systems. Tab Scout now owns the
@@ -29,7 +54,8 @@ Native release remains blocked: the optional external classifier conflicts with
 the written no-network policy, its disclosure omits transmitted paths, and opt-out
 does not cancel an in-flight batch. Owner asked to choose local-only or a qualified
 optional-network boundary. No app was signed, notarized, installed or released.
-New branding concepts are in `.fleet/brand-directions.md`; owner selection pending.
+The historical privacy blocker above was addressed by the later consent-v2 candidate;
+runtime acceptance remains. Tab Scout was subsequently selected and integrated.
 
 ## Current state
 

@@ -79,12 +79,9 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("OPTIONAL — TOPIC TAGGING").font(.caption.weight(.semibold))
                 .foregroundStyle(BrowserTheme.secondaryInk)
-            Text("Group your browsing into topics (dev, social, finance…) "
-                 + "via classifier.dev. Sends domain names and page titles "
-                 + "only — the only network call this app makes. "
-                 + "Skip it and everything else works.")
+            Text(Classifier.disclosure)
                 .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
-            Toggle("Tag my history topics", isOn: Binding(
+            Toggle("Allow sending browsing text to classifier.dev", isOn: Binding(
                 get: { model.classifyOptin },
                 set: { model.setClassifyOptin($0) }))
                 .toggleStyle(.checkbox)

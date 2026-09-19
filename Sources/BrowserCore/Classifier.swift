@@ -1,10 +1,12 @@
 import Foundation
 
 /// Optional enrichment via classifier.dev. Runs ONLY when the user has
-/// opted in during onboarding (meta.classify_optin) or explicitly taps
-/// "Classify" — the app makes no other network calls.
+/// granted current consent and explicitly taps "Classify".
 public struct Classifier: Sendable {
     public let db: SQLiteStore
+    public typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    private let transport: Transport
+    public static let disclosure = "Optional classification sends domain names, page titles (up to 140 characters) and URL paths (up to 60 characters) to classifier.dev when you choose Tag. Domain hints include up to three short page titles. URL credentials, query strings and fragments are excluded, but titles and paths may still contain personal information. These requests are not anonymous; the service also receives your network address. Turning this off cancels active requests and stops remaining batches. Data already sent cannot be recalled; existing local tags are kept. Skip this and all local browsing features still work."
     private static let endpoint = URL(
         string: "https://classifier.dev/v1/classify")!
 
@@ -22,7 +24,20 @@ public struct Classifier: Sendable {
         "productivity", "communication", "search-homepage", "nsfw", "other",
     ]
 
-    public init(db: SQLiteStore) { self.db = db }
+    public init(db: SQLiteStore, transport: @escaping Transport = { request in
+        try await URLSession.shared.data(for: request)
+    }) {
+        self.db = db
+        self.transport = transport
+    }
+
+    static func pageInput(url: String, title: String) -> String? {
+        guard let parsed = URL(string: url),
+              ["http", "https"].contains(parsed.scheme?.lowercased() ?? ""),
+              let host = parsed.host, !host.isEmpty else { return nil }
+        let path = parsed.path.count > 1 ? " \(parsed.path.prefix(60))" : ""
+        return "\(host)\(path) — \(title.prefix(140))"
+    }
 
     public struct Result: Sendable {
         public var domains = 0
@@ -35,9 +50,11 @@ public struct Classifier: Sendable {
     public func run(pageLimit: Int = 5000,
                     log: @Sendable (String) -> Void) async throws -> Result {
         var out = Result()
+        try Task.checkCancellation()
 
         let hosts = try db.query("""
             SELECT \(ReportEngine.hostSQL) h, COUNT(*) c FROM visits
+            WHERE lower(url) LIKE 'https://%' OR lower(url) LIKE 'http://%'
             GROUP BY h ORDER BY c DESC
         """).map { $0["h"]?.text ?? "" }
         // 'user' rows are manual overrides — never reclassify them.
@@ -57,11 +74,13 @@ public struct Classifier: Sendable {
                 let hint = tops.compactMap { $0["t"]?.text }
                     .map { String($0.prefix(60)) }
                     .joined(separator: " | ")
-                inputs.append("\(h) — \(hint.isEmpty ? h : String(hint.prefix(220)))")
+                let host = URL(string: "https://" + h)?.host ?? ""
+                inputs.append("\(host) — \(hint.isEmpty ? host : String(hint.prefix(220)))")
             }
             let pairs = try await classify(texts: inputs,
                                    labels: Self.domainLabels, log: log)
             try db.transaction {
+                try Task.checkCancellation()
                 for (i, p) in pairs.enumerated() {
                     try db.execute("""
                         INSERT OR REPLACE INTO domain_categories
@@ -83,15 +102,14 @@ public struct Classifier: Sendable {
         let newPages = pages.compactMap { r -> (String, String)? in
             guard let u = r["url"]?.text, !u.isEmpty, !knownP.contains(u),
                   let t = r["t"]?.text, !t.isEmpty else { return nil }
-            let host = URL(string: u)?.host ?? u
-            let path = URL(string: u)?.path ?? ""
-            let pathHint = path.count > 1 ? " \(path.prefix(60))" : ""
-            return (u, "\(host)\(pathHint) — \(t.prefix(140))")
+            guard let input = Self.pageInput(url: u, title: t) else { return nil }
+            return (u, input)
         }
         if !newPages.isEmpty {
             let pairs = try await classify(texts: newPages.map(\.1),
                                    labels: Self.pageLabels, log: log)
             try db.transaction {
+                try Task.checkCancellation()
                 for (i, p) in pairs.enumerated() {
                     try db.execute("""
                         INSERT OR REPLACE INTO page_categories
@@ -121,6 +139,7 @@ public struct Classifier: Sendable {
         -> [(String, String, Double)] {
         var out: [(String, String, Double)] = []
         for chunkStart in stride(from: 0, to: texts.count, by: 1000) {
+            try Task.checkCancellation()
             let chunk = Array(texts[chunkStart..<min(chunkStart + 1000,
                                                     texts.count)])
             var req = URLRequest(url: Self.endpoint)
@@ -129,7 +148,8 @@ public struct Classifier: Sendable {
             req.httpBody = try JSONSerialization.data(withJSONObject: [
                 "inputs": chunk, "labels": labels])
             log("classifying \(chunk.count)…")
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await transport(req)
+            try Task.checkCancellation()
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200
             else {
                 throw NSError(domain: "classifier", code: 1,
@@ -139,6 +159,15 @@ public struct Classifier: Sendable {
             let json = try JSONSerialization.jsonObject(with: data)
                 as? [String: Any]
             let results = json?["results"] as? [[String: Any]] ?? []
+            guard results.count == chunk.count,
+                  results.allSatisfy({ row in
+                      guard let label = row["label"] as? String,
+                            let confidence = row["confidence"] as? Double else { return false }
+                      return labels.contains(label) && confidence.isFinite && (0...1).contains(confidence)
+                  }) else {
+                throw NSError(domain: "classifier", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "Invalid classifier response; no tags saved for this stage."])
+            }
             for (i, r) in results.enumerated() {
                 out.append((chunk[i],
                             r["label"] as? String ?? "other",

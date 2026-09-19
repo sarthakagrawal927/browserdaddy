@@ -1,18 +1,38 @@
 import SwiftUI
+import BrowserCore
+
+@MainActor
+final class AppStartup: ObservableObject {
+    @Published private(set) var model: AppModel?
+    init(openArchive: () throws -> ArchiveStore = { try ArchiveStore() }) {
+        do { model = AppModel(store: try openArchive()) }
+        catch { model = nil }
+    }
+}
 
 @main
 struct BrowserDaddyApp: App {
-    @StateObject private var model = AppModel()
+    @StateObject private var startup = AppStartup()
 
     var body: some Scene {
         WindowGroup("browserdaddy") {
             Group {
-                if model.needsOnboarding { OnboardingView() }
-                else { RootView() }
+                if let model = startup.model {
+                    Group {
+                        if model.needsOnboarding { OnboardingView() }
+                        else { RootView() }
+                    }
+                    .environmentObject(model)
+                    .onAppear { model.boot() }
+                } else {
+                    ContentUnavailableView {
+                        Label("Couldn’t open your archive", systemImage: "externaldrive.badge.exclamationmark")
+                    } description: {
+                        Text("BrowserDaddy has not started collection. Check available disk space and access to your Application Support folder, then reopen the app. Your archive has not been deleted or replaced.")
+                    }
+                }
             }
-            .environmentObject(model)
             .frame(minWidth: 920, minHeight: 620)
-            .onAppear { model.boot() }
             .preferredColorScheme(.dark)
             .tint(BrowserTheme.action)
             .buttonStyle(DaddyButtonStyle())
@@ -21,15 +41,17 @@ struct BrowserDaddyApp: App {
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About browserdaddy") { model.showAbout = true }
+                Button("About browserdaddy") { startup.model?.showAbout = true }
+                    .disabled(startup.model == nil)
             }
             CommandGroup(after: .newItem) {
-                Button("Sync History") { model.runExtract() }
+                Button("Sync History") { startup.model?.runExtract() }
                     .keyboardShortcut("e")
-                    .disabled(model.extracting)
+                    .disabled(startup.model == nil || startup.model?.extracting == true)
                 Button("Refresh Report") {
-                    Task { await model.reload() }
+                    Task { await startup.model?.reload() }
                 }.keyboardShortcut("r")
+                    .disabled(startup.model == nil)
             }
         }
     }
@@ -158,7 +180,7 @@ struct RootView: View {
             Text(model.watcher.isRunning ? "Watching focus" : "Watcher off")
                 .foregroundStyle(model.watcher.isRunning
                                  ? BrowserTheme.mintInk : BrowserTheme.coral)
-            Text("On-device only").foregroundStyle(BrowserTheme.secondaryInk)
+            Text("Local archive · optional external tagging").foregroundStyle(BrowserTheme.secondaryInk)
         }
         .font(.caption).padding(10)
     }
@@ -179,7 +201,7 @@ struct RootView: View {
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
             Text("Where your time on the web actually goes.")
                 .foregroundStyle(BrowserTheme.secondaryInk)
-            Text("Local archive. Real attention. Nothing leaves this Mac.")
+            Text("Your archive stays on this Mac. Optional topic tagging sends selected browsing text to classifier.dev with your consent.")
                 .font(.callout).foregroundStyle(BrowserTheme.mintInk)
             Button("Done") { model.showAbout = false }
                 .buttonStyle(DaddyButtonStyle(prominent: true))

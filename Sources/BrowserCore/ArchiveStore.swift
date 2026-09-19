@@ -45,13 +45,12 @@ public final class ArchiveStore: @unchecked Sendable {
         try db.execute("""
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)
         """)
-        // Populated by scripts/classify-domains.sh — the app never calls
-        // the classifier itself; local-only boundary stays intact.
+        // Local category cache; optional external tagging requires current consent.
         try db.execute("""
             CREATE TABLE IF NOT EXISTS domain_categories (
                 host TEXT PRIMARY KEY, category TEXT, confidence REAL)
         """)
-        // Page-level topics — scripts/classify-pages.sh, same boundary.
+        // Page-level topics share the same optional-classification consent boundary.
         try db.execute("""
             CREATE TABLE IF NOT EXISTS page_categories (
                 url TEXT PRIMARY KEY, category TEXT, confidence REAL)

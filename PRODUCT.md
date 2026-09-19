@@ -1,6 +1,6 @@
 # BrowserDaddy
 
-BrowserDaddy is a native, local-only browsing-intelligence app for macOS. It
+BrowserDaddy is a native, local-first browsing-intelligence app for macOS. It
 answers "where does my time on the web actually go?" with two data sources no
 browser exposes together: a permanent unified history archive across every
 installed browser, and real frontmost-window attention time measured at the
@@ -34,7 +34,9 @@ Automation consent status (tab URL reads), launch-at-login toggle.
 
 ## Non-goals
 
-- No sync, telemetry, analytics, or network features.
+- No sync, telemetry or analytics. Optional on-demand classifier.dev topic tagging
+  requires explicit, revocable consent for domain names, truncated titles and
+  paths. Requests are not anonymous. The archive remains local.
 - No incognito reconstruction — private browsing is private.
 - Not a screen-time blocker (StayFocusd et al. already exist); this is the
   measurement layer, not the enforcement layer.

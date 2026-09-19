@@ -13,8 +13,10 @@ boundaries:
 - Respect private browsing by design: it is never written to history and must
   never be reconstructed or approximated. Do not log incognito tab URLs even
   when AppleScript would expose them — filter them out when detectable.
-- No analytics, telemetry, networking, or sync. All data stays on-device under
-  ~/Library/Application Support/BrowserDaddy/.
+- No analytics, telemetry, or sync. The archive stays on-device under
+  ~/Library/Application Support/BrowserDaddy/. Owner-approved exception:
+  optional classifier.dev requests require current, explicit, revocable consent
+  disclosing domain names, truncated titles and paths. Never call these anonymous.
 - BrowserDaddy owns browsing intelligence. StorageDaddy owns storage and
   configuration cleanup; PerformanceDaddy owns runtime diagnosis.
 - Use XcodeBuildMCP for build, test, run, logging, and native UI verification.

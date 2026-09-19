@@ -106,11 +106,9 @@ struct PermissionsView: View {
         BrowserBand(label: "TAGGING",
                     subtitle: "Optional topic classification via classifier.dev") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Groups domains and pages into topics (dev, social, "
-                     + "finance…). Sends domain names + page titles only — "
-                     + "the app's single network call, and only on demand.")
+                Text(Classifier.disclosure)
                     .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
-                Toggle("Allowed", isOn: Binding(
+                Toggle("Allow sending browsing text to classifier.dev", isOn: Binding(
                     get: { model.classifyOptin },
                     set: { model.setClassifyOptin($0) }))
                     .toggleStyle(.checkbox)

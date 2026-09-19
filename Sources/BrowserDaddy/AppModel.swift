@@ -48,17 +48,20 @@ final class AppModel: ObservableObject {
     let engine: ReportEngine
     let watcher: FocusWatcher
     private var didStartCollection = false
+    private var classificationTask: Task<Void, Never>?
+    static let classificationConsentVersion = "2"
     private let startCollectionOverride: (() -> Void)?
 
-    init(store suppliedStore: ArchiveStore? = nil,
+    init(store suppliedStore: ArchiveStore,
          startCollection: (() -> Void)? = nil) {
-        store = suppliedStore ?? (try! ArchiveStore())
+        store = suppliedStore
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
         startCollectionOverride = startCollection
         launchAtLogin = SMAppService.mainApp.status == .enabled
         needsOnboarding = store.metaGet("onboarded") != "1"
         classifyOptin = store.metaGet("classify_optin") == "1"
+            && store.metaGet("classify_consent_version") == Self.classificationConsentVersion
     }
 
     func boot() {
@@ -136,24 +139,28 @@ final class AppModel: ObservableObject {
         classifyLog = []
         classifySummary = ""
         let store = self.store
-        Task.detached(priority: .utility) { [weak self] in
+        classificationTask = Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
             let log: @Sendable (String) -> Void = { s in
                 Task { @MainActor in self.classifyLog.append(s) }
             }
             do {
                 let r = try await Classifier(db: store.db).run(log: log)
+                try Task.checkCancellation()
                 await MainActor.run {
+                    guard self.classifyOptin else { return }
                     self.classifySummary =
                         "+\(r.domains) domains, +\(r.pages) pages — "
                         + String(format: "%.0f%% of visits classified",
                                  r.coveragePct)
-                    self.classifying = false
                 }
                 await self.reloadFiltered()
             } catch {
-                log("error: \(error.localizedDescription)")
-                await MainActor.run { self.classifying = false }
+                if !Task.isCancelled { log("Classification failed. Please try again.") }
+            }
+            await MainActor.run {
+                self.classifying = false
+                self.classificationTask = nil
             }
         }
     }
@@ -161,6 +168,11 @@ final class AppModel: ObservableObject {
     func setClassifyOptin(_ on: Bool) {
         classifyOptin = on
         store.metaSet("classify_optin", on ? "1" : "0")
+        store.metaSet("classify_consent_version", on ? Self.classificationConsentVersion : "")
+        if !on {
+            classificationTask?.cancel()
+            classifySummary = "Classification disabled. Previously sent data cannot be recalled."
+        }
     }
 
     func finishOnboarding() {

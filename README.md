@@ -1,6 +1,6 @@
 # browserdaddy
 
-Native, local-only macOS browsing-intelligence app — unified cross-browser
+Native, local-first macOS browsing-intelligence app — unified cross-browser
 history archive + real attention tracking.
 
 ## Development
@@ -30,6 +30,25 @@ also imports the python archive at `~/browserdaddy/out/browserdaddy.db`.
 Classification (classifier.dev) is the app's only network call and only
 runs when you allow it — in onboarding or via Permissions → TAGGING.
 Everything else is on-device.
+
+The current consent discloses domain names, truncated page titles and URL paths.
+These requests are not anonymous: text can contain personal information and the
+service receives the network address. URL credentials, query strings and fragments
+are excluded. Old consent requires renewal. Opt-out cancels active requests and
+remaining batches, but cannot recall data already sent. Existing local tags remain.
+
+## Native release
+
+Tracking: https://github.com/sarthakagrawal927/browserdaddy/issues/3
+
+Build and test with XcodeBuildMCP using this Swift package path. Set session
+configuration to Release and build arm64 + x86_64. Verify both Mach-O minimum
+OS versions and architectures before using `scripts/package-release.py`.
+The script requires a fresh output directory and an existing Developer ID identity;
+it signs an isolated candidate, never installs or publishes it. Notarization,
+stapling, Gatekeeper checks and native runtime qualification are separate gates.
+Release bundles use `com.significanthobbies.browserdaddy`; development uses `.dev`.
+Moving from development to release may require new user-granted permissions.
 
 Until the app holds its own grants, the python launchd agents stay as
 backstop collectors. Retire them once verified:
