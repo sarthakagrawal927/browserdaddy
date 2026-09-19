@@ -6,10 +6,16 @@ struct BrowserDaddyApp: App {
 
     var body: some Scene {
         WindowGroup("browserdaddy") {
-            RootView()
-                .environmentObject(model)
-                .frame(minWidth: 920, minHeight: 620)
-                .onAppear { model.boot() }
+            Group {
+                if model.needsOnboarding { OnboardingView() }
+                else { RootView() }
+            }
+            .environmentObject(model)
+            .frame(minWidth: 920, minHeight: 620)
+            .onAppear { model.boot() }
+            .preferredColorScheme(.dark)
+            .tint(BrowserTheme.action)
+            .buttonStyle(DaddyButtonStyle())
         }
         .defaultSize(width: 1240, height: 800)
         .windowStyle(.hiddenTitleBar)

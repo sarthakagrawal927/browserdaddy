@@ -7,7 +7,8 @@ public struct ReportEngine: Sendable {
 
     public init(store: ArchiveStore) { db = store.db }
 
-    private static let hostSQL = """
+    /// Host-extraction expression on the `visits.url` column.
+    static let hostSQL = """
         CASE WHEN url LIKE 'http%' THEN
             substr(substr(url, instr(url,'//')+2), 1,
                    instr(substr(url, instr(url,'//')+2)||'/', '/')-1)

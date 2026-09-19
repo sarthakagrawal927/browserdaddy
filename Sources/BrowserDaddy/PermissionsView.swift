@@ -10,6 +10,7 @@ struct PermissionsView: View {
                 access
                 automation
                 collection
+                tagging
                 data
             }
             .padding(28)
@@ -90,6 +91,43 @@ struct PermissionsView: View {
                 if !model.extractLog.isEmpty {
                     Divider().overlay(BrowserTheme.divider)
                     ForEach(model.extractLog, id: \.self) {
+                        Text($0).font(.caption.monospaced())
+                            .foregroundStyle(BrowserTheme.secondaryInk)
+                    }
+                }
+            }
+        }
+    }
+
+    private var tagging: some View {
+        BrowserBand(label: "TAGGING",
+                    subtitle: "Optional topic classification via classifier.dev") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Groups domains and pages into topics (dev, social, "
+                     + "finance…). Sends domain names + page titles only — "
+                     + "the app's single network call, and only on demand.")
+                    .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
+                Toggle("Allowed", isOn: Binding(
+                    get: { model.classifyOptin },
+                    set: { model.setClassifyOptin($0) }))
+                    .toggleStyle(.checkbox)
+                    .foregroundStyle(BrowserTheme.ink)
+                HStack(spacing: 12) {
+                    Button(model.classifying ? "Tagging…" : "Tag new domains + pages") {
+                        model.runClassification()
+                    }
+                    .disabled(model.classifying || !model.classifyOptin)
+                    .buttonStyle(DaddyButtonStyle(prominent: true))
+                    if model.classifying {
+                        ProgressView().controlSize(.small)
+                    }
+                    if !model.classifySummary.isEmpty {
+                        Text(model.classifySummary).font(.caption)
+                            .foregroundStyle(BrowserTheme.mintInk)
+                    }
+                }
+                if !model.classifyLog.isEmpty {
+                    ForEach(model.classifyLog.suffix(6), id: \.self) {
                         Text($0).font(.caption.monospaced())
                             .foregroundStyle(BrowserTheme.secondaryInk)
                     }

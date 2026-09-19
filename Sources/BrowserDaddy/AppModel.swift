@@ -34,6 +34,12 @@ final class AppModel: ObservableObject {
     @Published var filterDays = 0 { didSet { Task { await reloadFiltered() } } }
     /// Timeline granularity: 0 day, 1 week, 2 month.
     @Published var granularity = 0
+    // onboarding + optional classification
+    @Published var needsOnboarding = false
+    @Published var classifyOptin = false
+    @Published var classifying = false
+    @Published var classifyLog: [String] = []
+    @Published var classifySummary = ""
 
     let store: ArchiveStore
     let engine: ReportEngine
@@ -44,6 +50,8 @@ final class AppModel: ObservableObject {
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
         launchAtLogin = SMAppService.mainApp.status == .enabled
+        needsOnboarding = store.metaGet("onboarded") != "1"
+        classifyOptin = store.metaGet("classify_optin") == "1"
     }
 
     func boot() {
@@ -105,6 +113,46 @@ final class AppModel: ObservableObject {
     func reloadFiltered() async {
         await reload()
         reloadAttention()
+    }
+
+    /// Opt-in classification of archive domains/pages via classifier.dev.
+    /// The ONLY network call this app makes; gated on user consent.
+    func runClassification() {
+        guard classifyOptin, !classifying else { return }
+        classifying = true
+        classifyLog = []
+        classifySummary = ""
+        let store = self.store
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let log: @Sendable (String) -> Void = { s in
+                Task { @MainActor in self.classifyLog.append(s) }
+            }
+            do {
+                let r = try await Classifier(db: store.db).run(log: log)
+                await MainActor.run {
+                    self.classifySummary =
+                        "+\(r.domains) domains, +\(r.pages) pages — "
+                        + String(format: "%.0f%% of visits classified",
+                                 r.coveragePct)
+                    self.classifying = false
+                }
+                await self.reloadFiltered()
+            } catch {
+                log("error: \(error.localizedDescription)")
+                await MainActor.run { self.classifying = false }
+            }
+        }
+    }
+
+    func setClassifyOptin(_ on: Bool) {
+        classifyOptin = on
+        store.metaSet("classify_optin", on ? "1" : "0")
+    }
+
+    func finishOnboarding() {
+        store.metaSet("onboarded", "1")
+        needsOnboarding = false
     }
 
     func reloadAttention() {

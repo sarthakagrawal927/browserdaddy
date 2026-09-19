@@ -58,6 +58,17 @@ public final class ArchiveStore: @unchecked Sendable {
         """)
     }
 
+    /// Small key-value flags (onboarding state, consent, import markers).
+    public func metaGet(_ key: String) -> String? {
+        (try? db.scalar("SELECT value FROM meta WHERE key = ?",
+                        [.text(key)], as: { $0.text })) ?? nil
+    }
+    public func metaSet(_ key: String, _ value: String) {
+        try? db.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?,?)",
+            [.text(key), .text(value)])
+    }
+
     /// INSERT OR IGNORE; returns count actually inserted.
     @discardableResult
     public func merge(visits: [HistoryVisit], source: HistorySource) throws -> Int {
