@@ -20,6 +20,7 @@ enum BrowserColor {
 struct DailyStackedBars: View {
     let series: [ReportEngine.DayPoint]
     var height: CGFloat = 140
+    @State private var hoverDay: Int?
 
     private var prepped: (days: [String], browsers: [String],
                           byDay: [String: [String: Int64]], max: Int64) {
@@ -35,26 +36,58 @@ struct DailyStackedBars: View {
     var body: some View {
         let (days, browsers, byDay, mx) = prepped
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .bottom, spacing: 1) {
-                ForEach(days, id: \.self) { d in
-                    let total = byDay[d, default: [:]].values.reduce(0, +)
-                    VStack(spacing: 0) {
-                        Spacer(minLength: 0)
-                        ForEach(browsers, id: \.self) { b in
-                            let c = byDay[d, default: [:]][b] ?? 0
-                            if c > 0 {
-                                Rectangle()
-                                    .fill(BrowserColor.forBrowser(b))
-                                    .frame(height: max(0.5,
-                                        CGFloat(c) / CGFloat(mx) * height))
+            GeometryReader { g in
+                HStack(alignment: .bottom, spacing: 1) {
+                    ForEach(Array(days.enumerated()), id: \.offset) { i, d in
+                        let total = byDay[d, default: [:]].values.reduce(0, +)
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            ForEach(browsers, id: \.self) { b in
+                                let c = byDay[d, default: [:]][b] ?? 0
+                                if c > 0 {
+                                    Rectangle()
+                                        .fill(BrowserColor.forBrowser(b))
+                                        .frame(height: max(0.5,
+                                            CGFloat(c) / CGFloat(mx) * height))
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .opacity(hoverDay == nil || hoverDay == i ? 1 : 0.45)
+                        .overlay(alignment: .bottom) {
+                            if hoverDay == i {
+                                Rectangle().stroke(BrowserTheme.ink,
+                                                   lineWidth: 1)
+                                    .frame(height: height)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .help("\(d): \(total.formatted()) visits")
+                }
+                .frame(height: height)
+                .contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let p):
+                        let frac = p.x / max(1, g.size.width)
+                        hoverDay = max(0, min(days.count - 1,
+                            Int(frac * CGFloat(days.count))))
+                    case .ended:
+                        hoverDay = nil
+                    }
                 }
             }
             .frame(height: height)
+
+            // live readout for the hovered column
+            if let i = hoverDay, days.indices.contains(i) {
+                let d = days[i]
+                Text("\(d) — " + browsers.compactMap { b in
+                    let c = byDay[d, default: [:]][b] ?? 0
+                    return c > 0 ? "\(b) \(c.formatted())" : nil
+                }.joined(separator: " · "))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(BrowserTheme.ink)
+            }
 
             // axis: month ticks + browser legend
             HStack {
@@ -93,6 +126,7 @@ struct ActivityHeatmap: View {
     let cells: [Int64]  // [dow*24 + hour]
 
     private let dayNames = ["S", "M", "T", "W", "T", "F", "S"]
+    private let dayFull = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
     var body: some View {
         let mx = max(1, cells.max() ?? 1)
@@ -113,11 +147,14 @@ struct ActivityHeatmap: View {
                         .foregroundStyle(BrowserTheme.secondaryInk)
                         .frame(width: 14, alignment: .leading)
                     ForEach(0..<24, id: \.self) { h in
-                        let v = Double(cells[d * 24 + h]) / Double(mx)
+                        let n = cells[d * 24 + h]
+                        let v = Double(n) / Double(mx)
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(BrowserTheme.mintInk
                                 .opacity(v < 0.02 ? 0.08 : 0.12 + v * 0.88))
                             .frame(maxWidth: .infinity, minHeight: 14)
+                            .help("\(dayFull[d]) \(h):00–\(h + 1):00 — "
+                                  + "\(n.formatted()) visits")
                     }
                 }
             }
@@ -131,8 +168,10 @@ struct TrendLine: View {
     let title: String
     let points: [Double]
     var labels: (first: String, last: String) = ("", "")
+    var pointLabels: [String] = []   // per-point axis labels for hover
     var color: Color = BrowserTheme.mintInk
     var kind: Kind = .seconds
+    @State private var hover: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -140,10 +179,17 @@ struct TrendLine: View {
                 Text(title).font(.caption.weight(.semibold))
                     .foregroundStyle(BrowserTheme.secondaryInk)
                 Spacer()
-                Text(latest).font(.callout.monospacedDigit().bold())
-                    .foregroundStyle(BrowserTheme.ink)
+                if let i = hover, points.indices.contains(i) {
+                    Text(hoverLabel(i))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(BrowserTheme.secondaryInk)
+                }
+                Text(shown).font(.callout.monospacedDigit().bold())
+                    .foregroundStyle(hover == nil
+                                     ? BrowserTheme.ink : BrowserTheme.mintInk)
             }
-            Sparkline(values: points, color: color).frame(height: 56)
+            Sparkline(values: points, color: color,
+                      hoverIndex: $hover).frame(height: 56)
             HStack {
                 Text(labels.first).font(.system(size: 8))
                 Spacer()
@@ -154,8 +200,12 @@ struct TrendLine: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var latest: String {
-        guard let v = points.last else { return "—" }
+    private var shown: String { format(points[hover ?? points.count - 1]) }
+    private func hoverLabel(_ i: Int) -> String {
+        pointLabels.indices.contains(i) ? pointLabels[i] : ""
+    }
+    private func format(_ v: Double?) -> String {
+        guard let v else { return "—" }
         switch kind {
         case .seconds:
             return v >= 3600 ? String(format: "%.1fh", v / 3600)

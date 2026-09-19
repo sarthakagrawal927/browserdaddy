@@ -135,6 +135,8 @@ struct RankRow: View {
 struct Sparkline: View {
     let values: [Double]
     var color: Color = BrowserTheme.mintInk
+    /// Optional — supply a binding to enable hover tracking + marker.
+    var hoverIndex: Binding<Int?>? = nil
 
     var body: some View {
         GeometryReader { geometry in
@@ -167,6 +169,24 @@ struct Sparkline: View {
                 }
                 .stroke(color, style: StrokeStyle(
                     lineWidth: 3, lineCap: .round, lineJoin: .round))
+                if let i = hoverIndex?.wrappedValue,
+                   points.indices.contains(i) {
+                    Circle().fill(color).frame(width: 7, height: 7)
+                        .overlay(Circle().stroke(Color.black, lineWidth: 1.5))
+                        .position(points[i])
+                }
+            }
+            .contentShape(Rectangle())
+            .onContinuousHover(coordinateSpace: .local) { phase in
+                guard let hoverIndex, values.count > 1 else { return }
+                switch phase {
+                case .active(let p):
+                    let frac = p.x / max(1, geometry.size.width)
+                    hoverIndex.wrappedValue = max(0, min(values.count - 1,
+                        Int(frac * CGFloat(values.count - 1) + 0.5)))
+                case .ended:
+                    hoverIndex.wrappedValue = nil
+                }
             }
         }
         .accessibilityElement(children: .ignore)

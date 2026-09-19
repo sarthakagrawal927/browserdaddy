@@ -448,12 +448,14 @@ struct DashboardView: View {
                     title: "Focused time / day",
                     points: r.focusDaily.map(\.activeSeconds),
                     labels: (r.focusDaily.first?.date ?? "",
-                             r.focusDaily.last?.date ?? ""))
+                             r.focusDaily.last?.date ?? ""),
+                    pointLabels: r.focusDaily.map(\.date))
                 TrendLine(
                     title: "New domains / month",
                     points: r.newDomainsPerWeek.map { Double($0.value) },
                     labels: (r.newDomainsPerWeek.first?.label ?? "",
                              r.newDomainsPerWeek.last?.label ?? ""),
+                    pointLabels: r.newDomainsPerWeek.map(\.label),
                     color: BrowserTheme.amber, kind: .count)
             }
             HStack(alignment: .top, spacing: 20) {
@@ -462,12 +464,14 @@ struct DashboardView: View {
                     points: r.noveltyWeekly.map { Double($0.value) },
                     labels: (r.noveltyWeekly.first?.label ?? "",
                              r.noveltyWeekly.last?.label ?? ""),
+                    pointLabels: r.noveltyWeekly.map(\.label),
                     color: BrowserTheme.blue, kind: .count)
                 TrendLine(
                     title: "Night-owl share / month (23–05)",
                     points: r.nightShare.map { Double($0.value) },
                     labels: (r.nightShare.first?.label ?? "",
                              r.nightShare.last?.label ?? ""),
+                    pointLabels: r.nightShare.map(\.label),
                     color: BrowserTheme.coral, kind: .count)
             }
             if !r.domainTrends.isEmpty {
