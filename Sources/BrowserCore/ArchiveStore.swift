@@ -51,6 +51,11 @@ public final class ArchiveStore: @unchecked Sendable {
             CREATE TABLE IF NOT EXISTS domain_categories (
                 host TEXT PRIMARY KEY, category TEXT, confidence REAL)
         """)
+        // Page-level topics — scripts/classify-pages.sh, same boundary.
+        try db.execute("""
+            CREATE TABLE IF NOT EXISTS page_categories (
+                url TEXT PRIMARY KEY, category TEXT, confidence REAL)
+        """)
     }
 
     /// INSERT OR IGNORE; returns count actually inserted.

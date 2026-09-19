@@ -106,6 +106,10 @@ public struct ReportEngine: Sendable {
         public var categories: [Count] = []         // category → visits
         public var categoryTopDomains: [(category: String, domains: [Count])] = []
         public var categoryTrends: [(category: String, monthly: [Count])] = []
+        // page-level topics (classifier.dev on titles)
+        public var topics: [Count] = []             // topic → visits
+        public var topicPages: [(topic: String, pages: [Count])] = [] // top pages
+        public var topicTrends: [(topic: String, monthly: [Count])] = []
     }
 
     /// `source` is "browser/profile"; `sinceDays` = 0 means all time.
@@ -698,6 +702,45 @@ public struct ReportEngine: Sendable {
         }
         r.categoryTrends = r.categories.prefix(5).compactMap { c in
             catSeries[c.label].map { (c.label, $0) }
+        }
+
+        // ---- page topics (classifier.dev on page titles) ----
+
+        r.topics = try db.query("""
+            SELECT COALESCE(p.category,'unclassified') t, COUNT(*) n
+            FROM visits LEFT JOIN page_categories p ON p.url = visits.url\(vw)
+            GROUP BY t ORDER BY n DESC
+        """).map {
+            Count(label: $0["t"]?.text ?? "?", value: $0["n"]?.int ?? 0)
+        }
+
+        let perTopic = try db.query("""
+            SELECT COALESCE(p.category,'unclassified') t, url, COUNT(*) n
+            FROM visits LEFT JOIN page_categories p ON p.url = visits.url\(vw)
+            GROUP BY t, url ORDER BY t, n DESC
+        """)
+        var topicMap: [String: [Count]] = [:]
+        for row in perTopic {
+            topicMap[row["t"]?.text ?? "?", default: []].append(
+                Count(label: row["url"]?.text ?? "?",
+                      value: row["n"]?.int ?? 0))
+        }
+        r.topicPages = topicMap.map { ($0.key, Array($0.value.prefix(3))) }
+
+        let topicMonthly = try db.query("""
+            SELECT COALESCE(p.category,'unclassified') t,
+                   strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) n
+            FROM visits LEFT JOIN page_categories p ON p.url = visits.url\(vw)
+            GROUP BY t, m ORDER BY m
+        """)
+        var topicSeries: [String: [Count]] = [:]
+        for row in topicMonthly {
+            topicSeries[row["t"]?.text ?? "?", default: []].append(
+                Count(label: row["m"]?.text ?? "",
+                      value: row["n"]?.int ?? 0))
+        }
+        r.topicTrends = r.topics.prefix(5).compactMap { t in
+            topicSeries[t.label].map { (t.label, $0) }
         }
         return r
     }

@@ -21,6 +21,7 @@ struct DashboardView: View {
                     movers(r)
                     trends(r)
                     categories(r)
+                    topics(r)
                     sites(r)
                     deepRead(r)
                     heatmap(r)
@@ -184,6 +185,62 @@ struct DashboardView: View {
         case "search", "documentation", "education": BrowserTheme.secondaryInk
         default: BrowserTheme.secondaryInk.opacity(0.7)
         }
+    }
+
+    // MARK: - topics
+
+    private func topics(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "TOPICS",
+                    subtitle: "Page-level classification — what the content actually is") {
+            VStack(alignment: .leading, spacing: 10) {
+                let mx = max(1, r.topics.map(\.value).max() ?? 1)
+                ForEach(Array(r.topics.prefix(12).enumerated()),
+                        id: \.offset) { _, t in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(t.value.formatted())
+                                .font(.callout.monospacedDigit())
+                                .foregroundStyle(catColor(t.label))
+                                .frame(minWidth: 62, alignment: .trailing)
+                            Text(t.label).foregroundStyle(BrowserTheme.ink)
+                            Text(pct(t.value, of: r.totalVisits))
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            Text(topTopic(r, t.label)).font(.caption)
+                                .foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        ShareBar(fraction: Double(t.value) / Double(mx),
+                                 color: catColor(t.label)).frame(height: 4)
+                    }
+                }
+                if !r.topicTrends.isEmpty {
+                    Divider().overlay(BrowserTheme.divider)
+                    Text("MONTHLY").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ForEach(Array(r.topicTrends.enumerated()), id: \.offset) { _, t in
+                        HStack(spacing: 14) {
+                            Text(t.topic).font(.callout)
+                                .foregroundStyle(catColor(t.topic))
+                                .frame(width: 130, alignment: .leading)
+                            Sparkline(values: t.monthly.map { Double($0.value) },
+                                      color: catColor(t.topic))
+                                .frame(height: 26)
+                            Text(t.monthly.last.map { $0.value.formatted() } ?? "—")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(BrowserTheme.secondaryInk)
+                                .frame(width: 60, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func topTopic(_ r: ReportEngine.Report, _ t: String) -> String {
+        r.topicPages.first { $0.topic == t }?.pages
+            .map { p in
+                URL(string: p.label)?.host ?? p.label
+            }.joined(separator: ", ") ?? ""
     }
 
     // MARK: - deep read
