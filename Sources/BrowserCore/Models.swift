@@ -11,11 +11,15 @@ public struct HistoryVisit: Sendable, Equatable {
     public var visitCount: Int
     public var typedCount: Int
     public var transition: String?
+    /// Chromium visit_duration (seconds). Unreliable as attention — kept for
+    /// fidelity with the python archive; focus.active_s is the honest signal.
+    public var duration: Double?
     public var fromVisit: Int64?
 
     public init(browser: String, profile: String, visitID: Int64, url: String,
                 title: String, visitedAt: Date, visitCount: Int,
-                typedCount: Int, transition: String?, fromVisit: Int64?) {
+                typedCount: Int, transition: String?, duration: Double? = nil,
+                fromVisit: Int64?) {
         self.browser = browser
         self.profile = profile
         self.visitID = visitID
@@ -25,6 +29,7 @@ public struct HistoryVisit: Sendable, Equatable {
         self.visitCount = visitCount
         self.typedCount = typedCount
         self.transition = transition
+        self.duration = duration
         self.fromVisit = fromVisit
     }
 }
