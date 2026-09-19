@@ -30,10 +30,12 @@ struct BrowserDaddyApp: App {
 }
 
 enum Workspace: String, CaseIterable, Identifiable {
-    case dashboard = "Dashboard", history = "History", permissions = "Permissions"
+    case attention = "Attention", dashboard = "Dashboard",
+         history = "History", permissions = "Permissions"
     var id: String { rawValue }
     var icon: String {
         switch self {
+        case .attention: return "eye"
         case .dashboard: return "chart.bar.xaxis"
         case .history: return "clock.arrow.circlepath"
         case .permissions: return "lock.shield"
@@ -43,7 +45,7 @@ enum Workspace: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var workspace: Workspace = .dashboard
+    @State private var workspace: Workspace = .attention
 
     var body: some View {
         NavigationSplitView {
@@ -82,7 +84,9 @@ struct RootView: View {
             .disabled(model.extracting)
 
             VStack(alignment: .leading, spacing: 5) {
-                navigationHeading("ARCHIVE")
+                navigationHeading("LIVE")
+                navigationItem(.attention)
+                navigationHeading("ARCHIVE").padding(.top, 9)
                 navigationItem(.dashboard)
                 navigationItem(.history)
                 navigationHeading("SETUP").padding(.top, 9)
@@ -130,6 +134,7 @@ struct RootView: View {
 
     @ViewBuilder private var content: some View {
         switch workspace {
+        case .attention: AttentionView()
         case .dashboard: DashboardView()
         case .history: HistoryView()
         case .permissions: PermissionsView()
@@ -154,6 +159,7 @@ struct RootView: View {
 
     private var statusText: String {
         switch workspace {
+        case .attention: "Real focused time, live"
         case .dashboard: "Unified browsing archive"
         case .history: "Every visit, every browser"
         case .permissions: "Access and grants"

@@ -10,7 +10,6 @@ struct DashboardView: View {
                 VStack(spacing: 16) {
                     verdict(r)
                     timeline(r)
-                    attention(r)
                     trends(r)
                     sites(r)
                     heatmap(r)
@@ -119,41 +118,6 @@ struct DashboardView: View {
         BrowserBand(label: "HEATMAP",
                     subtitle: "Visit density — weekday × hour (UTC)") {
             ActivityHeatmap(cells: r.heatmap)
-        }
-    }
-
-    // MARK: - attention
-
-    private func attention(_ r: ReportEngine.Report) -> some View {
-        BrowserBand(label: "ATTENTION",
-                    subtitle: "Real focused time — the signal browsers never record") {
-            VStack(alignment: .leading, spacing: 13) {
-                if r.attentionApps.isEmpty && r.attentionSites.isEmpty {
-                    Text("Focus segments appear here as the watcher runs.")
-                        .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
-                } else {
-                    let maxA = max(1, r.attentionApps.map(\.value).max() ?? 1)
-                    ForEach(Array(r.attentionApps.prefix(8).enumerated()),
-                            id: \.offset) { _, a in
-                        VStack(alignment: .leading, spacing: 3) {
-                            RankRow(value: fmtDur(Double(a.value)),
-                                    label: a.label, note: a.extra)
-                            ShareBar(fraction: Double(a.value) / Double(maxA))
-                                .frame(height: 4)
-                        }
-                    }
-                    if !r.attentionSites.isEmpty {
-                        Divider().overlay(BrowserTheme.divider)
-                        Text("BY SITE").font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        ForEach(Array(r.attentionSites.prefix(8).enumerated()),
-                                id: \.offset) { _, s in
-                            RankRow(value: fmtDur(Double(s.value)),
-                                    label: s.label)
-                        }
-                    }
-                }
-            }
         }
     }
 

@@ -425,6 +425,82 @@ public struct ReportEngine: Sendable {
         }
     }
 
+    public struct FocusSegRow: Sendable, Identifiable {
+        public var id: Int64
+        public var start: Date?
+        public var end: Date?
+        public var app: String
+        public var url: String
+        public var activeSeconds: Double
+        public var ticks: Int64
+    }
+
+    /// Raw focus segments for a UTC day (yyyy-MM-dd) — the timeline view.
+    public func focusSegments(day: String) throws -> [FocusSegRow] {
+        try db.query("""
+            SELECT id, start_utc, end_utc, app, url, active_s, ticks
+            FROM focus WHERE substr(start_utc,1,10) = ? ORDER BY start_utc
+        """, [.text(day)]).map {
+            FocusSegRow(id: $0["id"]?.int ?? 0,
+                        start: ISO8601.parse($0["start_utc"]?.text ?? ""),
+                        end: ISO8601.parse($0["end_utc"]?.text ?? ""),
+                        app: $0["app"]?.text ?? "?",
+                        url: $0["url"]?.text ?? "",
+                        activeSeconds: $0["active_s"]?.double ?? 0,
+                        ticks: $0["ticks"]?.int ?? 0)
+        }
+    }
+
+    /// Days that have focus data, newest first.
+    public func focusDays() throws -> [String] {
+        try db.query("""
+            SELECT substr(start_utc,1,10) d, SUM(active_s) a
+            FROM focus GROUP BY d ORDER BY d DESC
+        """).compactMap { $0["d"]?.text }
+    }
+
+    /// Active seconds by hour-of-day — when attention actually happens.
+    public func attentionHourly() throws -> [Int64] {
+        var hours = Array(repeating: Int64(0), count: 24)
+        for row in try db.query("""
+            SELECT CAST(strftime('%H', start_utc) AS INT) h,
+                   SUM(active_s) a FROM focus GROUP BY h
+        """) {
+            let h = Int(row["h"]?.int ?? 0)
+            if (0...23).contains(h) { hours[h] = Int64(row["a"]?.double ?? 0) }
+        }
+        return hours
+    }
+
+    /// Per-app totals: active vs open vs segment count vs longest span.
+    public func attentionAppsDetailed() throws -> [Count] {
+        try db.query("""
+            SELECT app, SUM(active_s) a, SUM(ticks)*2.0 o,
+                   COUNT(*) n, MAX(active_s) longest
+            FROM focus GROUP BY app ORDER BY a DESC
+        """).map {
+            Count(label: $0["app"]?.text ?? "?",
+                  value: Int64($0["a"]?.double ?? 0),
+                  extra: "\(fmtDur($0["o"]?.double ?? 0)) open · "
+                         + "\($0["n"]?.int ?? 0) spans · longest "
+                         + "\(fmtDur($0["longest"]?.double ?? 0))")
+        }
+    }
+
+    /// Per-site totals with open-vs-active split.
+    public func attentionSitesDetailed() throws -> [Count] {
+        try db.query("""
+            SELECT \(Self.hostSQL) h, SUM(active_s) a, SUM(ticks)*2.0 o,
+                   COUNT(*) n
+            FROM focus WHERE url != '' GROUP BY h ORDER BY a DESC LIMIT 20
+        """).map {
+            Count(label: $0["h"]?.text ?? "?",
+                  value: Int64($0["a"]?.double ?? 0),
+                  extra: "\(fmtDur($0["o"]?.double ?? 0)) open · "
+                         + "\($0["n"]?.int ?? 0) spans")
+        }
+    }
+
     public func attentionSites() throws -> [Count] {
         try db.query("""
             SELECT \(Self.hostSQL) h, SUM(active_s) a FROM focus

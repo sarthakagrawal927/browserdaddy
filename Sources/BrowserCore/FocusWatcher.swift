@@ -38,6 +38,8 @@ public final class FocusWatcher: @unchecked Sendable {
     private var misses = 0
     private var lastPoll = Date()
     public private(set) var isRunning = false
+    /// Fires every poll with (frontmostApp, activeTabURL) — feeds "now" UI.
+    public var onTick: ((String, String) -> Void)?
     public var onSegment: ((String, String) -> Void)?  // (app, url) for UI
 
     public init(store: ArchiveStore) { self.store = store }
@@ -91,6 +93,7 @@ public final class FocusWatcher: @unchecked Sendable {
             misses = 0
         }
         transition(to: app, url: url, title: title, dt: dt, active: active)
+        onTick?(app, url)
     }
 
     private func transition(to app: String, url: String, title: String,

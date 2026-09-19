@@ -20,6 +20,15 @@ final class AppModel: ObservableObject {
     @Published var browserFilter = "all" { didSet { Task { await search() } } }
     @Published var launchAtLogin = false
     @Published var showAbout = false
+    // attention surface
+    @Published var nowApp = ""
+    @Published var nowURL = ""
+    @Published var focusDay = "" { didSet { loadFocusDay() } }
+    @Published var focusDaysList: [String] = []
+    @Published var daySegments: [ReportEngine.FocusSegRow] = []
+    @Published var attentionAppsDetail: [ReportEngine.Count] = []
+    @Published var attentionSitesDetail: [ReportEngine.Count] = []
+    @Published var attentionHourly = [Int64](repeating: 0, count: 24)
 
     let store: ArchiveStore
     let engine: ReportEngine
@@ -34,13 +43,24 @@ final class AppModel: ObservableObject {
 
     func boot() {
         refreshPermissions()
+        watcher.onTick = { [weak self] app, url in
+            Task { @MainActor in
+                self?.nowApp = app
+                self?.nowURL = url
+            }
+        }
         watcher.onSegment = { [weak self] _, _ in
-            Task { @MainActor in self?.reloadAttention() }
+            Task { @MainActor in
+                self?.reloadAttention()
+                self?.loadFocusDay()
+            }
         }
         watcher.start()
         Task.detached(priority: .utility) { [store] in
             _ = try? ArchiveImporter.importIfNeeded(into: store)
             await self.reload()
+            await MainActor.run { self.reloadAttention() }
+            await MainActor.run { self.loadFocusDay() }
             await self.runExtract()   // first-boot archive pass
         }
         // Archive stays fresh without launchd: re-extract while running.
@@ -79,10 +99,30 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             let apps = (try? self.engine.attentionApps()) ?? []
             let sites = (try? self.engine.attentionSites()) ?? []
+            let appsDetail = (try? self.engine.attentionAppsDetailed()) ?? []
+            let sitesDetail = (try? self.engine.attentionSitesDetailed()) ?? []
+            let hourly = (try? self.engine.attentionHourly()) ?? []
+            let days = (try? self.engine.focusDays()) ?? []
             await MainActor.run {
                 self.report?.attentionApps = apps
                 self.report?.attentionSites = sites
+                self.attentionAppsDetail = appsDetail
+                self.attentionSitesDetail = sitesDetail
+                self.attentionHourly = hourly
+                self.focusDaysList = days
+                if self.focusDay.isEmpty {
+                    self.focusDay = days.first ?? ""
+                }
             }
+        }
+    }
+
+    func loadFocusDay() {
+        let day = focusDay
+        guard !day.isEmpty else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            let segs = (try? self?.engine.focusSegments(day: day)) ?? []
+            await MainActor.run { self?.daySegments = segs }
         }
     }
 
