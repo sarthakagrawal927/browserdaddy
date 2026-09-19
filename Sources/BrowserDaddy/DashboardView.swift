@@ -17,6 +17,7 @@ struct DashboardView: View {
                 VStack(spacing: 16) {
                     FilterBar()
                     verdict(r)
+                    spotCheck(r)
                     timeline(r)
                     movers(r)
                     trends(r)
@@ -91,6 +92,69 @@ struct DashboardView: View {
                     height: model.granularity == 0 ? 140 : 100)
             }
         }
+    }
+
+    // MARK: - spot check
+
+    private func spotCheck(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "SPOT CHECK",
+                    subtitle: "Did it change? — month-to-date vs same point last month") {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach(r.topDomains.prefix(30), id: \.label) { d in
+                            Button(d.label) {
+                                model.checkHost = d.label
+                                model.runSiteCheck()
+                            }
+                        }
+                    } label: {
+                        Label(model.checkHost, systemImage: "scope")
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .overlay(RoundedRectangle(cornerRadius: 6)
+                        .stroke(BrowserTheme.mintInk.opacity(0.4), lineWidth: 1))
+                    .onAppear { model.runSiteCheck() }
+                    Spacer()
+                }
+                if let c = model.siteCheck {
+                    verdictLine(c)
+                    Sparkline(values: c.daily.map { Double($0.value) },
+                              color: BrowserTheme.mintInk).frame(height: 34)
+                    Text("daily visits, last 60 days — \(c.daily.first?.label ?? "") → \(c.daily.last?.label ?? "")")
+                        .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
+                }
+            }
+        }
+    }
+
+    private func verdictLine(_ c: ReportEngine.SiteCheck) -> some View {
+        let up = c.deltaPct >= 0
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text("\(up ? "+" : "")\(String(format: "%.0f", c.deltaPct))%")
+                    .font(.title.bold())
+                    .foregroundStyle(up ? BrowserTheme.coral : BrowserTheme.mintInk)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(c.thisMonth.formatted()) visits so far this month")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(BrowserTheme.ink)
+                    Text("vs \(c.lastMonthSameDays.formatted()) by this point last month")
+                        .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
+                }
+            }
+            Text(focusVerdict(c)).font(.caption)
+                .foregroundStyle(BrowserTheme.secondaryInk)
+        }
+    }
+
+    private func focusVerdict(_ c: ReportEngine.SiteCheck) -> String {
+        if c.focusThisWeek == 0 && c.focusPrevWeek == 0 {
+            return "no focus data yet — visits count opens, not watch time"
+        }
+        let cur = fmtDur(c.focusThisWeek), prev = fmtDur(c.focusPrevWeek)
+        return "focused time: \(cur) this week vs \(prev) last week"
     }
 
     // MARK: - movers

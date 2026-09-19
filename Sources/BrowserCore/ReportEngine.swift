@@ -797,6 +797,61 @@ public struct ReportEngine: Sendable {
         }
     }
 
+    public struct SiteCheck: Sendable {
+        public var host = ""
+        public var thisMonth: Int64 = 0         // month-to-date
+        public var lastMonthSameDays: Int64 = 0 // same day-of-month, last month
+        public var deltaPct: Double = 0
+        public var daily: [Count] = []          // last 60 days
+        public var focusThisWeek: Double = 0    // active seconds, last 7d
+        public var focusPrevWeek: Double = 0
+    }
+
+    /// "Did X change?" — fair month-to-date comparison vs the same
+    /// day-of-month last month, plus a 7-day focus-window comparison.
+    public func siteCheck(_ host: String) throws -> SiteCheck {
+        var c = SiteCheck(host: host)
+        c.thisMonth = try db.scalar("""
+            SELECT COUNT(*) FROM visits
+            WHERE \(Self.hostSQL) = ?
+              AND strftime('%Y-%m',visit_time_utc,'localtime')
+                  = strftime('%Y-%m','now','localtime')
+        """, [.text(host)], as: { $0.int }) ?? 0
+        c.lastMonthSameDays = try db.scalar("""
+            SELECT COUNT(*) FROM visits
+            WHERE \(Self.hostSQL) = ?
+              AND strftime('%Y-%m',visit_time_utc,'localtime')
+                  = strftime('%Y-%m','now','localtime','-1 month')
+              AND CAST(strftime('%d',visit_time_utc,'localtime') AS INT)
+                  <= CAST(strftime('%d','now','localtime') AS INT)
+        """, [.text(host)], as: { $0.int }) ?? 0
+        c.deltaPct = c.lastMonthSameDays > 0
+            ? 100.0 * Double(c.thisMonth - c.lastMonthSameDays)
+                  / Double(c.lastMonthSameDays)
+            : (c.thisMonth > 0 ? 100 : 0)
+        c.daily = try db.query("""
+            SELECT strftime('%Y-%m-%d',visit_time_utc,'localtime') d, COUNT(*) c
+            FROM visits
+            WHERE \(Self.hostSQL) = ?
+              AND visit_time_utc >= datetime('now','-60 days')
+            GROUP BY d ORDER BY d
+        """, [.text(host)]).map {
+            Count(label: $0["d"]?.text ?? "", value: $0["c"]?.int ?? 0)
+        }
+        for row in try db.query("""
+            SELECT CASE WHEN start_utc >= datetime('now','-7 days')
+                        THEN 1 ELSE 0 END recent, SUM(active_s) a
+            FROM focus
+            WHERE \(Self.hostSQL) = ?
+              AND start_utc >= datetime('now','-14 days')
+            GROUP BY recent
+        """, [.text(host)]) {
+            if row["recent"]?.int == 1 { c.focusThisWeek = row["a"]?.double ?? 0 }
+            else { c.focusPrevWeek = row["a"]?.double ?? 0 }
+        }
+        return c
+    }
+
     /// Days that have focus data, newest first.
     public func focusDays(sinceDays: Int = 0) throws -> [String] {
         try db.query("""

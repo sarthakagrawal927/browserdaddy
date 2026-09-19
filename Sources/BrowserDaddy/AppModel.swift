@@ -40,6 +40,9 @@ final class AppModel: ObservableObject {
     @Published var classifying = false
     @Published var classifyLog: [String] = []
     @Published var classifySummary = ""
+    /// SPOT CHECK: selected domain + its month-over-month verdict.
+    @Published var checkHost = "www.youtube.com"
+    @Published var siteCheck: ReportEngine.SiteCheck?
 
     let store: ArchiveStore
     let engine: ReportEngine
@@ -153,6 +156,14 @@ final class AppModel: ObservableObject {
     func finishOnboarding() {
         store.metaSet("onboarded", "1")
         needsOnboarding = false
+    }
+
+    func runSiteCheck() {
+        let h = checkHost
+        Task.detached(priority: .utility) { [weak self] in
+            let c = try? self?.engine.siteCheck(h)
+            await MainActor.run { self?.siteCheck = c }
+        }
     }
 
     func reloadAttention() {
