@@ -732,14 +732,15 @@ public struct ReportEngine: Sendable {
         }
 
         let perTopic = try db.query("""
-            SELECT COALESCE(p.category,'unclassified') t, url, COUNT(*) n
+            SELECT COALESCE(p.category,'unclassified') t, visits.url u,
+                   COUNT(*) n
             FROM visits LEFT JOIN page_categories p ON p.url = visits.url\(vw)
-            GROUP BY t, url ORDER BY t, n DESC
+            GROUP BY t, u ORDER BY t, n DESC
         """)
         var topicMap: [String: [Count]] = [:]
         for row in perTopic {
             topicMap[row["t"]?.text ?? "?", default: []].append(
-                Count(label: row["url"]?.text ?? "?",
+                Count(label: row["u"]?.text ?? "?",
                       value: row["n"]?.int ?? 0))
         }
         r.topicPages = topicMap.map { ($0.key, Array($0.value.prefix(3))) }
