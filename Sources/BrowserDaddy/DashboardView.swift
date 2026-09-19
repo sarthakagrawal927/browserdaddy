@@ -17,6 +17,7 @@ struct DashboardView: View {
                 VStack(spacing: 16) {
                     FilterBar()
                     verdict(r)
+                    changedLately(r)
                     spotCheck(r)
                     timeline(r)
                     movers(r)
@@ -90,6 +91,39 @@ struct DashboardView: View {
                           : model.granularity == 1 ? r.weeklySeries
                           : r.dailySeries,
                     height: model.granularity == 0 ? 140 : 100)
+            }
+        }
+    }
+
+    // MARK: - changed lately
+
+    private func changedLately(_ r: ReportEngine.Report) -> some View {
+        BrowserBand(label: "CHANGED LATELY",
+                    subtitle: "Biggest shifts this month vs the same point last month") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(r.changedLately.enumerated()), id: \.offset) { _, c in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text("\(c.pct >= 0 ? "+" : "")\(Int(c.pct))%")
+                            .font(.callout.monospacedDigit().bold())
+                            .foregroundStyle(c.pct >= 0 ? BrowserTheme.coral
+                                                        : BrowserTheme.mintInk)
+                            .frame(width: 64, alignment: .trailing)
+                        Text(c.host).foregroundStyle(BrowserTheme.ink)
+                        Spacer()
+                        Text("\(c.prev.formatted()) → \(c.cur.formatted()) visits")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button {
+                            model.checkHost = c.host
+                            model.runSiteCheck()
+                        } label: {
+                            Image(systemName: "scope")
+                        }.buttonStyle(.plain)
+                            .foregroundStyle(BrowserTheme.mintInk)
+                            .help("Open in Spot Check")
+                    }
+                }
+                Text("green = down, coral = up — clicks send a site to Spot Check")
+                    .font(.caption2).foregroundStyle(.tertiary)
             }
         }
     }

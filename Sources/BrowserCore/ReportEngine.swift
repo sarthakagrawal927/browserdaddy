@@ -91,6 +91,7 @@ public struct ReportEngine: Sendable {
         public var weeklySeries: [DayPoint] = []    // week × browser
         public var monthlySeries: [DayPoint] = []   // month × browser
         public var noveltyWeekly: [Count] = []      // week → % visits to first-seen domains
+        public var changedLately: [(host: String, cur: Int64, prev: Int64, pct: Double)] = []
         public var moversUp: [Count] = []           // domains rising month-over-month
         public var moversDown: [Count] = []
         public var deepRead: [Count] = []           // site → active-minutes per visit
@@ -498,38 +499,53 @@ public struct ReportEngine: Sendable {
                   extra: "\($0["c"]?.int ?? 0) visits")
         }
 
-        // Movers: last full month vs the month before, per domain.
-        let monthlyByDomain = try db.query("""
+        // Movers + Changed Lately: month-to-date vs same day-of-month
+        // last month — fair partial-month comparison.
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM"
+        let cal = Calendar.current
+        let curMonth = df.string(from: Date())
+        let prevMonth = df.string(from: cal.date(
+            byAdding: .month, value: -1, to: Date()) ?? Date())
+        let today = cal.component(.day, from: Date())
+        let mtdRows = try db.query("""
             SELECT \(Self.hostSQL) h,
-                   strftime('%Y-%m',visit_time_utc,'localtime') m, COUNT(*) c
-            FROM visits\(vw) GROUP BY h, m
-        """)
-        var perDom: [String: [String: Int64]] = [:]
-        var monthSet = Set<String>()
-        for row in monthlyByDomain {
-            let h = row["h"]?.text ?? "?", m = row["m"]?.text ?? ""
-            perDom[h, default: [:]][m] = row["c"]?.int ?? 0
-            monthSet.insert(m)
-        }
-        let monthsSorted = monthSet.sorted()
-        if monthsSorted.count >= 2 {
-            let cur = monthsSorted[monthsSorted.count - 1]
-            let prev = monthsSorted[monthsSorted.count - 2]
-            var deltas: [(String, Int64, Int64, Int64)] = []
-            for (h, mm) in perDom {
-                let c = mm[cur] ?? 0, p = mm[prev] ?? 0
-                if c + p >= 20 { deltas.append((h, c - p, c, p)) }
+                   SUM(CASE WHEN m = ? THEN 1 ELSE 0 END) cur,
+                   SUM(CASE WHEN m = ? AND dd <= ? THEN 1 ELSE 0 END) prev
+            FROM (
+              SELECT url, browser, profile, visit_time_utc,
+                     strftime('%Y-%m',visit_time_utc,'localtime') m,
+                     CAST(strftime('%d',visit_time_utc,'localtime') AS INT) dd
+              FROM visits\(vw)
+            )
+            WHERE m IN (?, ?)
+            GROUP BY h
+        """, [.text(curMonth), .text(prevMonth), .int(Int64(today)),
+              .text(curMonth), .text(prevMonth)])
+        var changed: [(String, Int64, Int64, Double)] = []
+        for row in mtdRows {
+            let h = row["h"]?.text ?? "?"
+            let cur = row["cur"]?.int ?? 0, prev = row["prev"]?.int ?? 0
+            if cur + prev >= 20 {
+                let pct = prev > 0 ? 100.0 * Double(cur - prev) / Double(prev)
+                                 : (cur > 0 ? 100 : 0)
+                changed.append((h, cur, prev, pct))
             }
-            r.moversUp = deltas.filter { $0.1 > 0 }
-                .sorted { $0.1 > $1.1 }.prefix(8).map {
-                    Count(label: $0.0, value: $0.1,
-                          extra: "\($0.3) → \($0.2) (\(prev) → \(cur))")
-                }
-            r.moversDown = deltas.filter { $0.1 < 0 }
-                .sorted { $0.1 < $1.1 }.prefix(8).map {
-                    Count(label: $0.0, value: $0.1,
-                          extra: "\($0.3) → \($0.2) (\(prev) → \(cur))")
-                }
+        }
+        // |pct| as the "how much did it move" score — big relative shifts.
+        let ranked = changed.sorted { abs($0.3) > abs($1.3) }
+        r.moversUp = changed.filter { $0.3 > 0 }
+            .sorted { $0.3 > $1.3 }.prefix(8).map {
+                Count(label: $0.0, value: $0.1,
+                      extra: "\($0.2) → \($0.1) MTD")
+            }
+        r.moversDown = changed.filter { $0.3 < 0 }
+            .sorted { $0.3 < $1.3 }.prefix(8).map {
+                Count(label: $0.0, value: $0.1,
+                      extra: "\($0.2) → \($0.1) MTD")
+            }
+        r.changedLately = ranked.prefix(6).map {
+            (host: $0.0, cur: $0.1, prev: $0.2, pct: $0.3)
         }
 
         // Deep-read: active minutes per visit per site (focus ⨯ history).
