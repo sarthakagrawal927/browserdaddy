@@ -19,6 +19,7 @@ final class AppModel: ObservableObject {
     @Published var searchTerm = "" { didSet { Task { await search() } } }
     @Published var browserFilter = "all" { didSet { Task { await search() } } }
     @Published var launchAtLogin = false
+    @Published var showAbout = false
 
     let store: ArchiveStore
     let engine: ReportEngine
