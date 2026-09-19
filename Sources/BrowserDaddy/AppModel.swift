@@ -158,6 +158,18 @@ final class AppModel: ObservableObject {
         needsOnboarding = false
     }
 
+    /// Manual domain tag — persisted as source='user', survives tag runs.
+    func overrideDomain(_ host: String, _ category: String) {
+        try? store.setDomainCategory(host, category)
+        Task { await reloadFiltered() }
+    }
+
+    /// Rollup-level tag — applies to every host under the eTLD+1.
+    func overrideRollup(_ rollup: String, _ category: String) {
+        try? store.setRollupCategory(rollup, category)
+        Task { await reloadFiltered() }
+    }
+
     func runSiteCheck() {
         let h = checkHost
         Task.detached(priority: .utility) { [weak self] in

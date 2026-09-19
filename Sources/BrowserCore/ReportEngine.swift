@@ -112,6 +112,8 @@ public struct ReportEngine: Sendable {
         public var topics: [Count] = []             // topic → visits
         public var topicPages: [(topic: String, pages: [Count])] = [] // top pages
         public var topicTrends: [(topic: String, monthly: [Count])] = []
+        public var userDomainTags: Set<String> = [] // manually overridden hosts
+        public var userRollupTags: Set<String> = [] // …as eTLD+1 rollups
     }
 
     /// `source` is "browser/profile"; `sinceDays` = 0 means all time.
@@ -760,6 +762,11 @@ public struct ReportEngine: Sendable {
         r.topicTrends = r.topics.prefix(5).compactMap { t in
             topicSeries[t.label].map { (t.label, $0) }
         }
+
+        r.userDomainTags = Set(try db.query(
+            "SELECT host FROM domain_categories WHERE source = 'user'")
+            .compactMap { $0["host"]?.text })
+        r.userRollupTags = Set(r.userDomainTags.map { Domain.rollup($0) })
         return r
     }
 

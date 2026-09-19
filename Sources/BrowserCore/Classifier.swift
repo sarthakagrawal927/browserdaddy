@@ -40,6 +40,7 @@ public struct Classifier: Sendable {
             SELECT \(ReportEngine.hostSQL) h, COUNT(*) c FROM visits
             GROUP BY h ORDER BY c DESC
         """).map { $0["h"]?.text ?? "" }
+        // 'user' rows are manual overrides — never reclassify them.
         let knownD = Set(try db.query("SELECT host FROM domain_categories")
             .compactMap { $0["host"]?.text })
         let newHosts = hosts.filter { !$0.isEmpty && !knownD.contains($0) }

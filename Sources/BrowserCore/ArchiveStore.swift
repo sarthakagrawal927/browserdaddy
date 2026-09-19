@@ -56,6 +56,51 @@ public final class ArchiveStore: @unchecked Sendable {
             CREATE TABLE IF NOT EXISTS page_categories (
                 url TEXT PRIMARY KEY, category TEXT, confidence REAL)
         """)
+        // 'source' marks user overrides; tag runs never touch those rows.
+        ensureColumn("domain_categories", "source")
+        ensureColumn("page_categories", "source")
+    }
+
+    private func ensureColumn(_ table: String, _ column: String) {
+        let cols = (try? db.query("PRAGMA table_info(\(table))")) ?? []
+        if !cols.contains(where: { $0["name"]?.text == column }) {
+            try? db.execute(
+                "ALTER TABLE \(table) ADD COLUMN \(column) TEXT DEFAULT 'auto'")
+        }
+    }
+
+    /// Manual override — survives every future classification run.
+    public func setDomainCategory(_ host: String, _ category: String) throws {
+        try db.execute("""
+            INSERT OR REPLACE INTO domain_categories
+            (host, category, confidence, source) VALUES (?,?,1,'user')
+        """, [.text(host), .text(category)])
+    }
+    /// Rollup override — tags every seen host under an eTLD+1 domain
+    /// (e.g. "youtube.com" covers www./m./music.youtube.com).
+    public func setRollupCategory(_ rollup: String, _ category: String) throws {
+        let hosts = try db.query("""
+            SELECT CASE WHEN url LIKE 'http%' THEN
+                substr(substr(url, instr(url,'//')+2), 1,
+                       instr(substr(url, instr(url,'//')+2)||'/', '/')-1)
+                ELSE substr(url,1,40) END h
+            FROM visits GROUP BY h
+        """).compactMap { $0["h"]?.text }
+            .filter { Domain.rollup($0) == rollup }
+        try db.transaction {
+            for h in hosts {
+                try db.execute("""
+                    INSERT OR REPLACE INTO domain_categories
+                    (host, category, confidence, source) VALUES (?,?,1,'user')
+                """, [.text(h), .text(category)])
+            }
+        }
+    }
+    public func setPageCategory(_ url: String, _ category: String) throws {
+        try db.execute("""
+            INSERT OR REPLACE INTO page_categories
+            (url, category, confidence, source) VALUES (?,?,1,'user')
+        """, [.text(url), .text(category)])
     }
 
     /// Small key-value flags (onboarding state, consent, import markers).

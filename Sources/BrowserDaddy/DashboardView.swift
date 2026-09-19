@@ -121,6 +121,7 @@ struct DashboardView: View {
                             .foregroundStyle(BrowserTheme.mintInk)
                             .help("Open in Spot Check")
                     }
+                    .contextMenu { tagMenu(c.host) }
                 }
                 Text("green = down, coral = up — clicks send a site to Spot Check")
                     .font(.caption2).foregroundStyle(.tertiary)
@@ -159,6 +160,24 @@ struct DashboardView: View {
                     Text("daily visits, last 60 days — \(c.daily.first?.label ?? "") → \(c.daily.last?.label ?? "")")
                         .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
                 }
+            }
+        }
+    }
+
+    /// Right-click "Tag as…" for any domain row — writes a user override.
+    @ViewBuilder private func tagMenu(_ host: String) -> some View {
+        Menu("Tag as…") {
+            ForEach(Classifier.domainLabels, id: \.self) { l in
+                Button(l) { model.overrideDomain(host, l) }
+            }
+        }
+    }
+
+    /// Same for eTLD+1 rollup rows (SITES band).
+    @ViewBuilder private func rollupTagMenu(_ rollup: String) -> some View {
+        Menu("Tag as…") {
+            ForEach(Classifier.domainLabels, id: \.self) { l in
+                Button(l) { model.overrideRollup(rollup, l) }
             }
         }
     }
@@ -513,7 +532,11 @@ struct DashboardView: View {
                 ForEach(Array(r.topSites.prefix(15).enumerated()),
                         id: \.offset) { _, s in
                     VStack(alignment: .leading, spacing: 3) {
-                        RankRow(value: s.value.formatted(), label: s.label)
+                        RankRow(value: s.value.formatted(), label: s.label,
+                                note: pct(s.value, of: r.totalVisits)
+                                    + (r.userRollupTags.contains(s.label)
+                                       ? " · your tag" : ""))
+                            .contextMenu { rollupTagMenu(s.label) }
                         ShareBar(fraction: Double(s.value) / Double(mx))
                             .frame(height: 3)
                     }
