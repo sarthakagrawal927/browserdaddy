@@ -4,6 +4,13 @@ import BrowserCore
 struct DashboardView: View {
     @EnvironmentObject private var model: AppModel
 
+    /// "% of total" note for ranked rows.
+    private func pct(_ n: Int64, of total: Int64) -> String {
+        guard total > 0 else { return "0%" }
+        let p = 100.0 * Double(n) / Double(total)
+        return p < 0.5 ? "<1%" : String(format: "%.0f%%", p)
+    }
+
     var body: some View {
         ScrollView {
             if let r = model.report, r.totalVisits > 0 {
@@ -204,14 +211,16 @@ struct DashboardView: View {
                     Text("OPENS WITH").font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ForEach(Array(r.dayStarts.enumerated()), id: \.offset) { _, d in
-                        RankRow(value: "\(d.value)×", label: d.label)
+                        RankRow(value: "\(d.value)×", label: d.label,
+                                note: pct(d.value, of: activeDays(r)))
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("CLOSES WITH").font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     ForEach(Array(r.dayEnds.enumerated()), id: \.offset) { _, d in
-                        RankRow(value: "\(d.value)×", label: d.label)
+                        RankRow(value: "\(d.value)×", label: d.label,
+                                note: pct(d.value, of: activeDays(r)))
                     }
                 }
             }
@@ -377,16 +386,19 @@ struct DashboardView: View {
                                       color: BrowserTheme.cyan)
                                 .frame(height: 26)
                         }
-                        Text(p.value.formatted())
-                            .font(.callout.monospacedDigit().bold())
-                            .foregroundStyle(BrowserTheme.mintInk)
-                            .frame(width: 70, alignment: .trailing)
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(p.value.formatted())
+                                .font(.callout.monospacedDigit().bold())
+                                .foregroundStyle(BrowserTheme.mintInk)
+                            Text(pct(p.value, of: r.totalVisits))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }.frame(width: 70, alignment: .trailing)
                     }
                 }
                 Divider().overlay(BrowserTheme.divider)
                 ForEach(r.sources, id: \.name) { s in
                     RankRow(value: s.visits.formatted(), label: s.name,
-                            note: "\(s.first) → \(s.last)")
+                            note: "\(pct(s.visits, of: r.totalVisits)) · \(s.first) → \(s.last)")
                 }
             }
         }
@@ -435,7 +447,8 @@ struct DashboardView: View {
                             .foregroundStyle(.secondary)
                         ForEach(Array(r.busiestDays.prefix(8).enumerated()),
                                 id: \.offset) { _, d in
-                            RankRow(value: d.value.formatted(), label: d.label)
+                            RankRow(value: d.value.formatted(), label: d.label,
+                                    note: pct(d.value, of: r.totalVisits))
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -487,8 +500,10 @@ struct DashboardView: View {
                 Divider().overlay(BrowserTheme.divider)
                 Text("REVISIT DEPTH").font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                let habitTotal = max(1, r.habit.reduce(0) { $0 + $1.value })
                 ForEach(r.habit, id: \.label) { h in
-                    RankRow(value: h.value.formatted(), label: h.label)
+                    RankRow(value: h.value.formatted(), label: h.label,
+                            note: pct(h.value, of: habitTotal))
                 }
             }
         }
@@ -502,7 +517,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(r.sharedDomains.enumerated()), id: \.offset) { _, s in
                     RankRow(value: s.visits.formatted(), label: s.domain,
-                            note: s.sources)
+                            note: "\(s.sources) · \(pct(s.visits, of: r.totalVisits))")
                 }
             }
         }
@@ -543,11 +558,17 @@ struct DashboardView: View {
                     Text("No search terms captured yet.")
                         .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
                 }
+                let searchTotal = r.searches.reduce(0) { $0 + $1.value }
                 ForEach(Array(r.searches.enumerated()), id: \.offset) { _, s in
-                    RankRow(value: s.value.formatted(), label: s.label)
+                    RankRow(value: s.value.formatted(), label: s.label,
+                            note: pct(s.value, of: searchTotal))
                 }
             }
         }
+    }
+
+    private func activeDays(_ r: ReportEngine.Report) -> Int64 {
+        Int64(max(1, Set(r.dailySeries.map(\.date)).count))
     }
 
     // MARK: - empty

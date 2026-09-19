@@ -5,6 +5,12 @@ import BrowserCore
 struct AttentionView: View {
     @EnvironmentObject private var model: AppModel
 
+    private func pct(_ n: Int64, of total: Int64) -> String {
+        guard total > 0 else { return "0%" }
+        let p = 100.0 * Double(n) / Double(total)
+        return p < 0.5 ? "<1%" : String(format: "%.0f%%", p)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -175,11 +181,12 @@ struct AttentionView: View {
                     subtitle: "Active time per app and per site — open time shown too") {
             VStack(alignment: .leading, spacing: 13) {
                 let maxA = max(1, model.attentionAppsDetail.map(\.value).max() ?? 1)
+                let totA = model.attentionAppsDetail.reduce(0) { $0 + $1.value }
                 ForEach(Array(model.attentionAppsDetail.prefix(10).enumerated()),
                         id: \.offset) { _, a in
                     VStack(alignment: .leading, spacing: 3) {
                         RankRow(value: fmtDur(Double(a.value)), label: a.label,
-                                note: a.extra)
+                                note: pct(a.value, of: totA) + " · " + a.extra)
                         ShareBar(fraction: Double(a.value) / Double(maxA))
                             .frame(height: 4)
                     }
@@ -188,10 +195,11 @@ struct AttentionView: View {
                     Divider().overlay(BrowserTheme.divider)
                     Text("BY SITE").font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                    let totS = model.attentionSitesDetail.reduce(0) { $0 + $1.value }
                     ForEach(Array(model.attentionSitesDetail.prefix(12).enumerated()),
                             id: \.offset) { _, s in
                         RankRow(value: fmtDur(Double(s.value)), label: s.label,
-                                note: s.extra)
+                                note: pct(s.value, of: totS) + " · " + s.extra)
                     }
                 }
             }
