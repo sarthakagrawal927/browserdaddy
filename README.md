@@ -50,9 +50,10 @@ it signs an isolated candidate, never installs or publishes it. Notarization,
 stapling, Gatekeeper checks and native runtime qualification are separate gates.
 Release bundles use `com.significanthobbies.browserdaddy`; development uses `.dev`.
 Moving from development to release may require new user-granted permissions.
-The release is sandboxed. `Support/container-migration.plist` copies the existing
+The release is sandboxed. `Support/container-migration.plist` moves the existing
 BrowserDaddy Application Support folder into the stable app container on its
-first sandboxed launch; packaging must retain that resource.
+first sandboxed launch; packaging must retain that resource. Release qualification
+must take a recoverable backup before that first launch.
 
 Until the app holds its own grants, the python launchd agents stay as
 backstop collectors. Retire them once verified:
