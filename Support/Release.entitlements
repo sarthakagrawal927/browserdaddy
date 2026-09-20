@@ -16,5 +16,10 @@
     <array>
         <string>com.google.Chrome</string>
     </array>
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+        <string>com.significanthobbies.browserdaddy-spks</string>
+        <string>com.significanthobbies.browserdaddy-spki</string>
+    </array>
 </dict>
 </plist>

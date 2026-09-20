@@ -18,7 +18,8 @@ def configuration():
     return {"SUFeedURL": FEED_URL, "SUPublicEDKey": key,
             "SUEnableAutomaticChecks": True, "SUAutomaticallyUpdate": False,
             "SUAllowsAutomaticUpdates": False, "SUSendProfileInfo": False,
-            "SUVerifyUpdateBeforeExtraction": True}
+            "SUVerifyUpdateBeforeExtraction": True,
+            "SUEnableInstallerLauncherService": True}
 
 def embed(app):
     if not FRAMEWORK.is_dir():

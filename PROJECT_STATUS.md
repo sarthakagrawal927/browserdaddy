@@ -1,11 +1,14 @@
 # BrowserDaddy — project status
 
-## 2026-09-20 — first update release 0.2.2 build 1
+## 2026-09-20 — first update release 0.2.2 build 2
 
-BrowserDaddy 0.2.2 (build 1) is the first Sparkle-enabled release. Universal
+BrowserDaddy 0.2.2 (build 2) is the first Sparkle-enabled release. Universal
 arm64/x86_64 DMG, Developer ID signed with hardened runtime, Apple notarization
-accepted (submission 77007791-6041-4c1c-8336-b3f26b3a7fc0), stapled and
-Gatekeeper-validated. The signed appcast was generated via
+accepted (submission 88eec1dc-fcbc-4149-85d1-65f3860da599), stapled and
+Gatekeeper-validated. Build 2 replaces the unpublished-to-users build 1 after
+independent review found the sandboxed app lacked
+`SUEnableInstallerLauncherService` and the `-spks`/`-spki` mach-lookup
+entitlements Sparkle requires to install updates in a sandboxed host. The signed appcast was generated via
 `scripts/prepare-appcast.py` and is served live at
 `https://browserdaddy.significanthobbies.com/updates/appcast.xml` by the
 `browserdaddy-updates` Worker; the Ed-signed enclosure downloads verified.
