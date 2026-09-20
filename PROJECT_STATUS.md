@@ -1,5 +1,22 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — daddy-series update stack
+
+BrowserDaddy now shares the daddy-series structure and Sparkle update stack
+with storagedaddy and performancedaddy (issue
+sarthakagrawal927/storagedaddy#30): Sparkle 2.9.6 pinned, `AppUpdates` defers
+checks and relaunches while a history sync is in flight, update items live in
+the app menu, `SU*` keys are injected at packaging by
+`scripts/package-release.py`, and `scripts/{sparkle_support,prepare-appcast,
+test_sparkle_support}.py` match the sibling repos. An updates-only Worker owns
+`browserdaddy.significanthobbies.com/updates/*` — deployed and verified live
+alongside the ios-landings Pages site; the feed is a dormant empty channel
+until the first release publishes an enclosure via `prepare-appcast.py`, which
+gates on a signed, notarized, stapled DMG plus SHA256SUMS. EdDSA signing key
+`browserdaddy-updates` stays in Keychain; only the public key is committed.
+CI parity added (`swift test`, release build, sparkle unittest, worker test).
+All package tests plus sparkle and worker tests pass.
+
 ## 2026-09-20 — expandable history, retagging and composable filters
 
 History now combines text, browser, browser/profile, rolling date range,
