@@ -22,6 +22,47 @@ public struct ReportEngine: Sendable {
         public var last: String
     }
 
+    public enum HistoryTagFilter: String, CaseIterable, Sendable {
+        case all, tagged, untagged, manual
+    }
+
+    public struct HistoryQuery: Equatable, Sendable {
+        public var term: String
+        public var browser: String
+        public var source: String
+        public var sinceDays: Int
+        public var category: String
+        public var tag: HistoryTagFilter
+
+        public init(term: String = "", browser: String = "all", source: String = "all",
+                    sinceDays: Int = 0, category: String = "all",
+                    tag: HistoryTagFilter = .all) {
+            self.term = term
+            self.browser = browser
+            self.source = source
+            self.sinceDays = sinceDays
+            self.category = category
+            self.tag = tag
+        }
+    }
+
+    public struct HistoryResult: Equatable, Sendable {
+        public let browser: String
+        public let profile: String
+        public let visitID: Int64
+        public let url: String
+        public let title: String
+        public let visitedAt: Date?
+        public let host: String
+        public let category: String?
+        public let tagSource: String?
+        public let tagScope: String?
+        public let pageCategory: String?
+        public let pageTagSource: String?
+        public let domainCategory: String?
+        public let domainTagSource: String?
+    }
+
     public struct Count: Sendable {
         public var label: String
         public var value: Int64
@@ -944,30 +985,95 @@ public struct ReportEngine: Sendable {
         }
     }
 
-    /// Unified history search for the History surface.
-    public func searchHistory(term: String, browser: String? = nil,
-                              limit: Int = 500) throws -> [[String: DBValue]] {
+    /// Unified history search for the History surface. Every user-controlled
+    /// value is bound, including LIKE terms and date cutoffs.
+    public func searchHistory(_ query: HistoryQuery = HistoryQuery(),
+                              limit: Int = 500) throws -> [HistoryResult] {
         var sql = """
-            SELECT browser, profile, url, title, visit_time_utc
-            FROM visits WHERE 1=1
+            WITH enriched AS (
+                SELECT browser, profile, visit_id, url, title, visit_time_utc,
+                       \(Self.hostSQL) host
+                FROM visits
+            )
+            SELECT e.browser, e.profile, e.visit_id, e.url, e.title,
+                   e.visit_time_utc, e.host,
+                   COALESCE(p.category, d.category) category,
+                   COALESCE(p.source, d.source) tag_source,
+                   CASE WHEN p.category IS NOT NULL THEN 'page'
+                        WHEN d.category IS NOT NULL THEN 'domain' END tag_scope,
+                   p.category page_category, p.source page_tag_source,
+                   d.category domain_category, d.source domain_tag_source
+            FROM enriched e
+            LEFT JOIN page_categories p ON p.url = e.url
+            LEFT JOIN domain_categories d ON d.host = e.host
+            WHERE 1=1
         """
         var params: [DBValue] = []
-        if !term.isEmpty {
-            sql += " AND (url LIKE ? OR title LIKE ?)"
-            params += [.text("%\(term)%"), .text("%\(term)%")]
+        if !query.term.isEmpty {
+            sql += " AND (e.url LIKE ? OR e.title LIKE ?)"
+            params += [.text("%\(query.term)%"), .text("%\(query.term)%")]
         }
-        if let browser, !browser.isEmpty, browser != "all" {
-            sql += " AND browser = ?"
-            params.append(.text(browser))
+        if query.browser != "all" {
+            sql += " AND e.browser = ?"
+            params.append(.text(query.browser))
         }
-        sql += " ORDER BY visit_time_utc DESC LIMIT ?"
+        if query.source != "all" {
+            sql += " AND e.browser || '/' || e.profile = ?"
+            params.append(.text(query.source))
+        }
+        if query.sinceDays > 0 {
+            sql += " AND e.visit_time_utc >= ?"
+            params.append(.text(ISO8601.format(
+                Date().addingTimeInterval(-Double(query.sinceDays) * 86_400))))
+        }
+        if query.category != "all" {
+            sql += " AND COALESCE(p.category, d.category) = ?"
+            params.append(.text(query.category))
+        }
+        switch query.tag {
+        case .all: break
+        case .tagged: sql += " AND COALESCE(p.category, d.category) IS NOT NULL"
+        case .untagged: sql += " AND COALESCE(p.category, d.category) IS NULL"
+        case .manual: sql += " AND COALESCE(p.source, d.source) = 'user'"
+        }
+        sql += " ORDER BY e.visit_time_utc DESC LIMIT ?"
         params.append(.int(Int64(limit)))
-        return try db.query(sql, params)
+        return try db.query(sql, params).map { row in
+            HistoryResult(
+                browser: row["browser"]?.text ?? "",
+                profile: row["profile"]?.text ?? "",
+                visitID: row["visit_id"]?.int ?? 0,
+                url: row["url"]?.text ?? "",
+                title: row["title"]?.text ?? "",
+                visitedAt: ISO8601.parse(row["visit_time_utc"]?.text ?? ""),
+                host: row["host"]?.text ?? "",
+                category: row["category"]?.text,
+                tagSource: row["tag_source"]?.text,
+                tagScope: row["tag_scope"]?.text,
+                pageCategory: row["page_category"]?.text,
+                pageTagSource: row["page_tag_source"]?.text,
+                domainCategory: row["domain_category"]?.text,
+                domainTagSource: row["domain_tag_source"]?.text
+            )
+        }
     }
 
     public func browsers() throws -> [String] {
         try db.query("SELECT DISTINCT browser FROM visits ORDER BY 1")
             .compactMap { $0["browser"]?.text }
+    }
+
+    public func historySources() throws -> [String] {
+        try db.query("SELECT DISTINCT browser || '/' || profile source FROM visits ORDER BY 1")
+            .compactMap { $0["source"]?.text }
+    }
+
+    public func historyCategories() throws -> [String] {
+        try db.query("""
+            SELECT category FROM domain_categories
+            UNION SELECT category FROM page_categories
+            ORDER BY 1
+        """).compactMap { $0["category"]?.text }
     }
 }
 

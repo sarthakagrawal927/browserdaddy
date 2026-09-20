@@ -1,6 +1,18 @@
 {
   "$schema": "fleet.design-review.v1",
   "version": 1,
+  "historyExplorationReview": {
+    "date": "2026-09-20",
+    "mode": "preserve",
+    "contract": "Make archived visits explorable and retaggable with composable local filters without weakening the optional-network consent boundary",
+    "direction": "Preserved owner-approved Tab Scout identity and black/mint Daddy-series controls",
+    "evidence": "Synthetic native AX and visual inspection covered five filter menus, active-filter count and clear action, row disclosure, exact evidence fields, retag sheet scope switching, and a saved local tag disappearing from the untagged result set",
+    "critique": "37/40; compact filters remain readable at the supported native window and expanded evidence stays aligned with the visit content",
+    "audit": "18/20; parameterized filters, deterministic precedence, local override persistence and no-network retag path covered by tests",
+    "checks": "XcodeBuildMCP: 30 tests passed; synthetic preview build and interaction passed",
+    "unresolved": {"p0": 0, "p1": 0},
+    "limits": "Synthetic archive only; no personal browsing data or real classifier request was used during review"
+  },
   "project": "browserdaddy",
   "target": "BrowserDaddy identity, mascot, icon, native shell and landing artwork",
   "surfaceMode": "operate",

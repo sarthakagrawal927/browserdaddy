@@ -5,8 +5,53 @@ import BrowserCore
 final class AppStartup: ObservableObject {
     @Published private(set) var model: AppModel?
     init(openArchive: () throws -> ArchiveStore = { try ArchiveStore() }) {
-        do { model = AppModel(store: try openArchive()) }
+        do {
+            if CommandLine.arguments.contains("--preview-fixture") {
+                model = AppModel(store: try PreviewArchive.make(), startCollection: {})
+            } else {
+                model = AppModel(store: try openArchive())
+            }
+        }
         catch { model = nil }
+    }
+}
+
+private enum PreviewArchive {
+    static func make() throws -> ArchiveStore {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserDaddy-preview-\(UUID().uuidString).db")
+        let store = try ArchiveStore(url: url)
+        store.metaSet("onboarded", "1")
+        let now = Date()
+        let chrome = HistorySource(browser: "chrome", profile: "Work",
+                                   path: url, engine: .chromium)
+        let safari = HistorySource(browser: "safari", profile: "Personal",
+                                   path: url, engine: .safari)
+        try store.merge(visits: [
+            visit(1, "https://developer.apple.com/documentation/swiftui", "SwiftUI documentation", now),
+            visit(2, "https://github.com/example/project/pulls", "Pull requests · example/project", now.addingTimeInterval(-840)),
+            visit(3, "https://news.ycombinator.com/", "Hacker News", now.addingTimeInterval(-2_400)),
+            visit(4, "https://docs.example.dev/performance", "Performance guide", now.addingTimeInterval(-8_400)),
+        ], source: chrome)
+        try store.merge(visits: [
+            visit(10, "https://www.youtube.com/watch", "Design systems talk", now.addingTimeInterval(-1_500)),
+            visit(11, "https://music.example/album", "Morning playlist", now.addingTimeInterval(-12_000)),
+            visit(12, "https://travel.example/itinerary", "Weekend itinerary", now.addingTimeInterval(-92_000)),
+        ], source: safari)
+        try store.setDomainCategory("developer.apple.com", "documentation")
+        try store.setPageCategory("https://github.com/example/project/pulls", "programming")
+        try store.db.execute("""
+            INSERT OR REPLACE INTO domain_categories
+            (host, category, confidence, source) VALUES (?,?,?,'auto')
+        """, [.text("www.youtube.com"), .text("video"), .double(0.94)])
+        return store
+    }
+
+    private static func visit(_ id: Int64, _ url: String, _ title: String,
+                              _ date: Date) -> HistoryVisit {
+        HistoryVisit(browser: "", profile: "", visitID: id, url: url, title: title,
+                     visitedAt: date, visitCount: 1, typedCount: 0,
+                     transition: "link", fromVisit: nil)
     }
 }
 
@@ -81,7 +126,12 @@ enum Workspace: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var workspace: Workspace = .attention
+    @State private var workspace: Workspace
+
+    init() {
+        _workspace = State(initialValue: CommandLine.arguments.contains("--preview-fixture")
+                           ? .history : .attention)
+    }
 
     var body: some View {
         NavigationSplitView {

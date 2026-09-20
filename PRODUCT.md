@@ -24,8 +24,12 @@ with eTLD+1 rollup, daily rhythm (hourly/day-of-week), profile personalities
 
 ### History
 
-Searchable, filterable unified timeline across all browsers and profiles —
-survives browser pruning because the archive merges, never replaces.
+Searchable unified timeline across all browsers and profiles that survives
+browser pruning because the archive merges, never replaces. Text, browser,
+profile, date range, category and tag-state filters compose locally. Each visit
+expands into its source, exact time, URL and effective tag provenance. A person
+can apply or clear a local page, exact-domain or registrable-domain override;
+this changes derived metadata, never browser history, and makes no network call.
 
 ### Permissions & onboarding
 

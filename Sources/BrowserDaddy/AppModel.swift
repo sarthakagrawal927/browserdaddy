@@ -12,14 +12,32 @@ final class AppModel: ObservableObject {
     @Published var browserAccess: [BrowserAccessStatus] = []
     @Published var browserAccessError = ""
     struct HistoryRow: Identifiable {
-        let id = UUID()
+        let id: String
         let time: Date?
-        let browser, profile, title, url: String
+        let browser, profile, title, url, host: String
+        let category, tagSource, tagScope: String?
+        let pageCategory, pageTagSource, domainCategory, domainTagSource: String?
+        var source: String { "\(browser)/\(profile)" }
+    }
+    enum HistoryTagScope: String, CaseIterable, Identifiable {
+        case page = "This page"
+        case domain = "Exact domain"
+        case rollup = "Whole site"
+        var id: Self { self }
     }
     @Published var historyRows: [HistoryRow] = []
     @Published var browsers: [String] = []
+    @Published var historySources: [String] = []
+    @Published var historyCategories: [String] = []
+    @Published var historyActionError: String?
     @Published var searchTerm = "" { didSet { Task { await search() } } }
     @Published var browserFilter = "all" { didSet { Task { await search() } } }
+    @Published var historySourceFilter = "all" { didSet { Task { await search() } } }
+    @Published var historyDaysFilter = 0 { didSet { Task { await search() } } }
+    @Published var historyCategoryFilter = "all" { didSet { Task { await search() } } }
+    @Published var historyTagFilter = ReportEngine.HistoryTagFilter.all {
+        didSet { Task { await search() } }
+    }
     @Published var launchAtLogin = false
     @Published var showAbout = false
     // attention surface
@@ -181,6 +199,8 @@ final class AppModel: ObservableObject {
         }.value
         report = r
         browsers = (try? engine.browsers()) ?? []
+        historySources = (try? engine.historySources()) ?? []
+        historyCategories = (try? engine.historyCategories()) ?? []
         await search()
     }
 
@@ -250,6 +270,53 @@ final class AppModel: ObservableObject {
     func overrideRollup(_ rollup: String, _ category: String) {
         try? store.setRollupCategory(rollup, category)
         Task { await reloadFiltered() }
+    }
+
+    @discardableResult
+    func setHistoryTag(_ row: HistoryRow, scope: HistoryTagScope, category: String) -> Bool {
+        historyActionError = nil
+        do {
+            switch scope {
+            case .page: try store.setPageCategory(row.url, category)
+            case .domain: try store.setDomainCategory(row.host, category)
+            case .rollup: try store.setRollupCategory(Domain.rollup(row.host), category)
+            }
+            Task { await reloadFiltered() }
+            return true
+        } catch {
+            historyActionError = "Couldn’t save this local tag. The archive was not changed."
+            return false
+        }
+    }
+
+    @discardableResult
+    func clearHistoryTag(_ row: HistoryRow, scope: HistoryTagScope) -> Bool {
+        historyActionError = nil
+        do {
+            switch scope {
+            case .page: try store.clearPageCategory(row.url)
+            case .domain: try store.clearDomainCategory(row.host)
+            case .rollup: try store.clearRollupCategory(Domain.rollup(row.host))
+            }
+            Task { await reloadFiltered() }
+            return true
+        } catch {
+            historyActionError = "Couldn’t clear this local tag. The archive was not changed."
+            return false
+        }
+    }
+
+    var historyActiveFilterCount: Int {
+        [browserFilter != "all", historySourceFilter != "all", historyDaysFilter != 0,
+         historyCategoryFilter != "all", historyTagFilter != .all].filter { $0 }.count
+    }
+
+    func clearHistoryFilters() {
+        browserFilter = "all"
+        historySourceFilter = "all"
+        historyDaysFilter = 0
+        historyCategoryFilter = "all"
+        historyTagFilter = .all
     }
 
     func runSiteCheck() {
@@ -331,17 +398,27 @@ final class AppModel: ObservableObject {
 
     func search() async {
         let engine = self.engine
-        let term = searchTerm, filter = browserFilter
+        let query = ReportEngine.HistoryQuery(
+            term: searchTerm, browser: browserFilter, source: historySourceFilter,
+            sinceDays: historyDaysFilter, category: historyCategoryFilter,
+            tag: historyTagFilter
+        )
         let rows = (try? await Task.detached(priority: .userInitiated) {
-            try engine.searchHistory(term: term, browser: filter)
+            try engine.searchHistory(query)
         }.value) ?? []
+        guard query == ReportEngine.HistoryQuery(
+            term: searchTerm, browser: browserFilter, source: historySourceFilter,
+            sinceDays: historyDaysFilter, category: historyCategoryFilter,
+            tag: historyTagFilter
+        ) else { return }
         historyRows = rows.map {
             HistoryRow(
-                time: ISO8601.parse($0["visit_time_utc"]?.text ?? ""),
-                browser: $0["browser"]?.text ?? "",
-                profile: $0["profile"]?.text ?? "",
-                title: $0["title"]?.text ?? "",
-                url: $0["url"]?.text ?? "")
+                id: "\($0.browser)/\($0.profile)/\($0.visitID)",
+                time: $0.visitedAt, browser: $0.browser, profile: $0.profile,
+                title: $0.title, url: $0.url, host: $0.host,
+                category: $0.category, tagSource: $0.tagSource, tagScope: $0.tagScope,
+                pageCategory: $0.pageCategory, pageTagSource: $0.pageTagSource,
+                domainCategory: $0.domainCategory, domainTagSource: $0.domainTagSource)
         }
     }
 

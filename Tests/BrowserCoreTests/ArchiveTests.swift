@@ -56,4 +56,69 @@ final class ArchiveTests: XCTestCase {
                                 source: src)
         XCTAssertEqual(n, 0)
     }
+
+    func testHistoryFiltersComposeAndExposeEffectiveTagProvenance() throws {
+        let chrome = HistorySource(browser: "chrome", profile: "Work",
+                                   path: tmp, engine: .chromium)
+        let safari = HistorySource(browser: "safari", profile: "Personal",
+                                   path: tmp, engine: .safari)
+        let now = Date()
+        try store.merge(visits: [
+            HistoryVisit(browser: "chrome", profile: "Work", visitID: 10,
+                         url: "https://docs.example.dev/guide", title: "Swift guide",
+                         visitedAt: now, visitCount: 1, typedCount: 0,
+                         transition: "link", fromVisit: nil),
+            HistoryVisit(browser: "chrome", profile: "Work", visitID: 11,
+                         url: "https://plain.example.dev/", title: "Plain",
+                         visitedAt: now, visitCount: 1, typedCount: 0,
+                         transition: "link", fromVisit: nil),
+        ], source: chrome)
+        try store.merge(visits: [
+            HistoryVisit(browser: "safari", profile: "Personal", visitID: 12,
+                         url: "https://news.example/", title: "Old news",
+                         visitedAt: now.addingTimeInterval(-120 * 86_400),
+                         visitCount: 1, typedCount: 0,
+                         transition: "link", fromVisit: nil),
+        ], source: safari)
+        try store.setDomainCategory("docs.example.dev", "documentation")
+        try store.setPageCategory("https://docs.example.dev/guide", "programming")
+        let engine = ReportEngine(store: store)
+
+        let manual = try engine.searchHistory(.init(
+            term: "Swift", browser: "chrome", source: "chrome/Work",
+            sinceDays: 7, category: "programming", tag: .manual))
+        XCTAssertEqual(manual.count, 1)
+        XCTAssertEqual(manual[0].host, "docs.example.dev")
+        XCTAssertEqual(manual[0].category, "programming")
+        XCTAssertEqual(manual[0].tagSource, "user")
+        XCTAssertEqual(manual[0].tagScope, "page")
+        XCTAssertEqual(manual[0].pageCategory, "programming")
+        XCTAssertEqual(manual[0].domainCategory, "documentation")
+
+        let untagged = try engine.searchHistory(.init(tag: .untagged))
+        XCTAssertEqual(untagged.map(\.url), ["https://plain.example.dev/", "https://news.example/"])
+        XCTAssertEqual(try engine.historySources(), ["chrome/Work", "safari/Personal"])
+        XCTAssertEqual(try engine.historyCategories(), ["documentation", "programming"])
+    }
+
+    func testClearingPageDomainAndRollupTagsDoesNotTouchVisits() throws {
+        let source = HistorySource(browser: "chrome", profile: "Default",
+                                   path: tmp, engine: .chromium)
+        try store.merge(visits: [
+            visit(20, url: "https://www.example.com/a"),
+            visit(21, url: "https://docs.example.com/b"),
+        ], source: source)
+        try store.setRollupCategory("example.com", "documentation")
+        try store.setPageCategory("https://www.example.com/a", "programming")
+        try store.clearPageCategory("https://www.example.com/a")
+        XCTAssertEqual(try ReportEngine(store: store).searchHistory(
+            .init(term: "www.example.com")).first?.category, "documentation")
+        try store.clearDomainCategory("www.example.com")
+        XCTAssertNil(try ReportEngine(store: store).searchHistory(
+            .init(term: "www.example.com")).first?.category)
+        try store.clearRollupCategory("example.com")
+        XCTAssertTrue(try ReportEngine(store: store).searchHistory(
+            .init(tag: .tagged)).isEmpty)
+        XCTAssertEqual(try store.db.scalar("SELECT COUNT(*) FROM visits", as: { $0.int }), 2)
+    }
 }

@@ -14,4 +14,4 @@ cp "$bin_path/BrowserDaddy" "$bundle_path/Contents/MacOS/BrowserDaddy"
 cp Support/Info.plist "$bundle_path/Contents/Info.plist"
 cp Support/BrowserDaddy.icns "$bundle_path/Contents/Resources/BrowserDaddy.icns"
 cp -R "$bin_path/BrowserDaddy_BrowserDaddy.bundle" "$bundle_path/Contents/Resources/" 2>/dev/null || true
-open "$bundle_path"
+open -n "$bundle_path" --args "$@"

@@ -28,5 +28,7 @@ screenshots, personal browsing data, or false native-release claims.
 ## Product truth
 
 BrowserDaddy combines a local unified history archive with measured foreground
-attention. Current native distribution remains a development preview. Classifier
-policy and native release qualification are separate open work, not solved by art.
+attention. Native releases are private, signed and notarized prereleases; public
+download remains separately gated. Optional external classification is distinct
+from local history filters and manual retagging, and always retains its explicit
+consent boundary.

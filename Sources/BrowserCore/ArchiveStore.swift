@@ -102,6 +102,25 @@ public final class ArchiveStore: @unchecked Sendable {
         """, [.text(url), .text(category)])
     }
 
+    public func clearDomainCategory(_ host: String) throws {
+        try db.execute("DELETE FROM domain_categories WHERE host = ?", [.text(host)])
+    }
+
+    public func clearPageCategory(_ url: String) throws {
+        try db.execute("DELETE FROM page_categories WHERE url = ?", [.text(url)])
+    }
+
+    public func clearRollupCategory(_ rollup: String) throws {
+        let hosts = try db.query("SELECT host FROM domain_categories")
+            .compactMap { $0["host"]?.text }
+            .filter { Domain.rollup($0) == rollup }
+        try db.transaction {
+            for host in hosts {
+                try db.execute("DELETE FROM domain_categories WHERE host = ?", [.text(host)])
+            }
+        }
+    }
+
     /// Small key-value flags (onboarding state, consent, import markers).
     public func metaGet(_ key: String) -> String? {
         (try? db.scalar("SELECT value FROM meta WHERE key = ?",

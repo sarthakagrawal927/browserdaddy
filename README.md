@@ -32,11 +32,20 @@ Classification (classifier.dev) is the app's only network call and only
 runs when you allow it — in onboarding or via Permissions → TAGGING.
 Everything else is on-device.
 
+History search composes browser, profile, date-range, category and tag-state
+filters. Click a visit to expand its local evidence, then use **Retag** to apply
+or clear a page, exact-domain or whole-site override. Local retagging never calls
+classifier.dev and never modifies the browser's own history. Optional external
+classification remains a separate consent-gated action in Permissions.
+
 The current consent discloses domain names, truncated page titles and URL paths.
 These requests are not anonymous: text can contain personal information and the
 service receives the network address. URL credentials, query strings and fragments
 are excluded. Old consent requires renewal. Opt-out cancels active requests and
 remaining batches, but cannot recall data already sent. Existing local tags remain.
+
+Use `scripts/run-local.sh --preview-fixture` for a synthetic History workspace
+that contains no personal browsing data.
 
 ## Native release
 
