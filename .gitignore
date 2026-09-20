@@ -3,3 +3,8 @@
 .DS_Store
 DerivedData/
 dist/
+__pycache__/
+site/node_modules/
+site/.wrangler/
+site/public/updates/*.dmg
+artifacts/

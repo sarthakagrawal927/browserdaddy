@@ -70,6 +70,7 @@ private struct BrowserDaddyContent: View {
 @main
 struct BrowserDaddyApp: App {
     @StateObject private var startup = AppStartup()
+    @StateObject private var updates = AppUpdates()
 
     var body: some Scene {
         WindowGroup("browserdaddy") {
@@ -77,6 +78,7 @@ struct BrowserDaddyApp: App {
                 if let model = startup.model {
                     BrowserDaddyContent(model: model)
                     .onAppear { model.boot() }
+                    .task { updates.start(model: model) }
                 } else {
                     ContentUnavailableView {
                         Label("Couldn’t open your archive", systemImage: "externaldrive.badge.exclamationmark")
@@ -96,6 +98,11 @@ struct BrowserDaddyApp: App {
             CommandGroup(replacing: .appInfo) {
                 Button("About browserdaddy") { startup.model?.showAbout = true }
                     .disabled(startup.model == nil)
+            }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updates.check() }
+                    .disabled(!updates.canCheck || !updates.isIdle)
+                Toggle("Automatically Check for Updates", isOn: $updates.automaticallyChecks)
             }
             CommandGroup(after: .newItem) {
                 Button("Sync History") { startup.model?.runExtract() }

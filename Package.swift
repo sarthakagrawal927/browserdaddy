@@ -1,5 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
+import Foundation
+
+let sparkleTestFrameworks = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    .appendingPathComponent(".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64").path
 
 let package = Package(
     name: "BrowserDaddy",
@@ -8,15 +12,18 @@ let package = Package(
         .library(name: "BrowserCore", targets: ["BrowserCore"]),
         .executable(name: "BrowserDaddy", targets: ["BrowserDaddy"]),
     ],
+    dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")],
     targets: [
         .target(name: "BrowserCore"),
         .executableTarget(
             name: "BrowserDaddy",
-            dependencies: ["BrowserCore"],
+            dependencies: ["BrowserCore", .product(name: "Sparkle", package: "Sparkle")],
             exclude: ["Resources/StorageDaddy.png", "Resources/PageDoodles.png"],
-            resources: [.process("Resources")]
+            resources: [.process("Resources")],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore"]),
-        .testTarget(name: "BrowserDaddyTests", dependencies: ["BrowserDaddy"]),
+        .testTarget(name: "BrowserDaddyTests", dependencies: ["BrowserDaddy"],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", sparkleTestFrameworks])]),
     ]
 )
