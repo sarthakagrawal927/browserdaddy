@@ -18,11 +18,15 @@ used. The design receipt passes in preserve mode and all 30 tests pass. Source i
 pushed at `fc5a59f` and a universal Developer ID signed 0.2.1 build 4 candidate has
 valid hardened-runtime sandbox entitlements and macOS 14 arm64/x86_64 slices.
 
-Apple notarization is not yet complete: the existing `storagedaddy-notary` Keychain
-profile disappeared after the preceding successful PerformanceDaddy submission, and
-`notarytool` now reports that no password item exists for it. The installed notarized
-BrowserDaddy 0.2.0 build 3 and its archive remain untouched; no unnotarized replacement
-or release was published. Tracking: GitHub issue #5.
+Apple accepted app submission `cceadcd6-cb7d-4be4-93a8-5a79316d4657` and final
+DMG submission `e559de82-4470-4766-87bd-adfdad583e0c`. Both artifacts were stapled
+and Gatekeeper accepted them as Notarized Developer ID. The signed `v0.2.1-4` source
+tag points at `fc5a59f`; its private GitHub release contains the final DMG and checksum
+(`5672146c820c2044beb94065650bd69b91709a705f255eb8fd9e423efba42c17`). Installed
+BrowserDaddy is now 0.2.1 build 4; the prior app bundle is recoverably retained under
+`.build/BrowserDaddy-0.2.0-3-before-0.2.1.app`. The sandbox archive was not replaced;
+its SQLite integrity check passes with 109,698 visit rows and 524 focus rows. Tracking:
+GitHub issue #5.
 
 ## 2026-09-20 — browser-scoped folder grants
 
