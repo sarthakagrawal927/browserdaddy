@@ -1,5 +1,29 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — expandable history, retagging and composable filters
+
+History now combines text, browser, browser/profile, rolling date range,
+effective category and tag-state filters in one parameterized local query.
+Rows disclose source, exact visit time, full URL, separate page/domain categories
+and whether each tag came from the user or classifier.dev. A visible Retag sheet
+supports exact-page, exact-domain and registrable-domain overrides plus scoped
+clearing. These operations change only derived archive metadata; they never edit
+browser history or make a network request. Optional external classification stays
+separate in Permissions behind consent v2.
+
+Synthetic native verification covered expansion, accessible labels, scope switching,
+filter menus/count/clear behavior and a saved local tag immediately leaving the
+active untagged result set. No personal browsing data or real classifier request was
+used. The design receipt passes in preserve mode and all 30 tests pass. Source is
+pushed at `fc5a59f` and a universal Developer ID signed 0.2.1 build 4 candidate has
+valid hardened-runtime sandbox entitlements and macOS 14 arm64/x86_64 slices.
+
+Apple notarization is not yet complete: the existing `storagedaddy-notary` Keychain
+profile disappeared after the preceding successful PerformanceDaddy submission, and
+`notarytool` now reports that no password item exists for it. The installed notarized
+BrowserDaddy 0.2.0 build 3 and its archive remain untouched; no unnotarized replacement
+or release was published. Tracking: GitHub issue #5.
+
 ## 2026-09-20 — browser-scoped folder grants
 
 BrowserDaddy no longer requests Full Disk Access or scans browser locations
