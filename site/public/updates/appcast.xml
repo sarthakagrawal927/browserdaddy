@@ -1,6 +1,14 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
-        <title>browserdaddy</title>
+        <title>BrowserDaddy</title>
+        <item>
+            <title>0.2.2</title>
+            <pubDate>Sun, 20 Sep 2026 22:39:37 +0530</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://browserdaddy.significanthobbies.com/updates/browserdaddy-0.2.2-build1-universal.dmg" length="7504128" type="application/octet-stream" sparkle:edSignature="64K2NwSTrfa0Vo6gT4lGT2gYwMXn8Oc3xRDPrqZUz1cdgTmVELizeQ/fMfK2hBwP81Exnzv1C+Fwrqjtp0mxBQ=="/>
+        </item>
     </channel>
 </rss>

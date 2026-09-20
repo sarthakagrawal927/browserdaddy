@@ -1,5 +1,18 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — first update release 0.2.2 build 1
+
+BrowserDaddy 0.2.2 (build 1) is the first Sparkle-enabled release. Universal
+arm64/x86_64 DMG, Developer ID signed with hardened runtime, Apple notarization
+accepted (submission 77007791-6041-4c1c-8336-b3f26b3a7fc0), stapled and
+Gatekeeper-validated. The signed appcast was generated via
+`scripts/prepare-appcast.py` and is served live at
+`https://browserdaddy.significanthobbies.com/updates/appcast.xml` by the
+`browserdaddy-updates` Worker; the Ed-signed enclosure downloads verified.
+Notarization credentials were restored to Keychain as the
+`fleet-personal-notary` profile (from Infisical). SHA256SUMS records the final
+stapled artifact since stapling rewrites the DMG.
+
 ## 2026-09-20 — daddy-series update stack
 
 BrowserDaddy now shares the daddy-series structure and Sparkle update stack
