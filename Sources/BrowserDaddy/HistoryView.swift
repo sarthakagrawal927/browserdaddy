@@ -85,7 +85,7 @@ struct HistoryView: View {
                  ? "Nothing archived yet" : "No matches")
                 .font(.title2.bold()).foregroundStyle(BrowserTheme.ink)
             Text(model.report == nil || model.report?.totalVisits == 0
-                 ? "Grant Full Disk Access and sync history first."
+                 ? "Connect a browser folder in Permissions, then sync history."
                  : "Try a different search or browser filter.")
                 .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
             Spacer()

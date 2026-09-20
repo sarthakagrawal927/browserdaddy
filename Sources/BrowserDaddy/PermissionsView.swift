@@ -21,27 +21,43 @@ struct PermissionsView: View {
 
     private var access: some View {
         BrowserBand(label: "HISTORY",
-                    subtitle: "Full Disk Access lets BrowserDaddy read browser databases") {
+                    subtitle: "Read-only access to browser folders you choose") {
             VStack(alignment: .leading, spacing: 13) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Circle()
-                        .fill(model.fda ? BrowserTheme.mintInk : BrowserTheme.coral)
-                        .frame(width: 10, height: 10)
-                    Text(model.fda
-                         ? "Full Disk Access granted"
-                         : "Not granted — extraction is blocked")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(BrowserTheme.ink)
-                }
-                Text("Add BrowserDaddy in System Settings → Privacy & Security "
-                     + "→ Full Disk Access, then relaunch. Stores that stay "
-                     + "unreadable are reported in the sync log, never silently skipped.")
+                Text("BrowserDaddy does not need Full Disk Access. Connect only the "
+                     + "browser folders you want archived. Access is read-only and revocable; "
+                     + "disconnecting a folder stops future reads but keeps existing archive rows.")
                     .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
-                Button("Open Full Disk Access Settings") {
-                    Permissions.openFullDiskAccessSettings()
+                ForEach(model.browserAccess) { status in
+                    browserRow(status)
+                }
+                if !model.browserAccessError.isEmpty {
+                    Text(model.browserAccessError)
+                        .font(.caption).foregroundStyle(BrowserTheme.coral)
                 }
             }
         }
+    }
+
+    private func browserRow(_ status: BrowserAccessStatus) -> some View {
+        HStack(spacing: 10) {
+            Circle().fill(accessColor(status.state)).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.kind.displayName).font(.callout.weight(.semibold))
+                    .foregroundStyle(BrowserTheme.ink)
+                Text(accessLabel(status.state)).font(.caption)
+                    .foregroundStyle(BrowserTheme.secondaryInk)
+                    .lineLimit(1).truncationMode(.middle)
+                    .help(accessLabel(status.state))
+            }
+            Spacer()
+            Button(accessButtonTitle(status.state)) {
+                model.connectBrowser(status.kind)
+            }
+            if case .connected = status.state {
+                Button("Disconnect") { model.removeBrowser(status.kind) }
+            }
+        }
+        .padding(.vertical, 2)
     }
 
     private var automation: some View {
@@ -139,7 +155,7 @@ struct PermissionsView: View {
 
     private var data: some View {
         BrowserBand(label: "DATA",
-                    subtitle: "Local archive location — nothing leaves this Mac") {
+                    subtitle: "Local archive location · external tagging stays optional") {
             HStack {
                 Image(systemName: "internaldrive")
                     .foregroundStyle(BrowserTheme.mintInk)
@@ -170,6 +186,28 @@ struct PermissionsView: View {
         case .denied: "denied — enable in Settings"
         case .notRunning: "browser not running"
         default: "unknown"
+        }
+    }
+
+    private func accessColor(_ state: BrowserAccessState) -> Color {
+        if case .connected = state { return BrowserTheme.mintInk }
+        if case .needsAccess = state { return BrowserTheme.coral }
+        return BrowserTheme.secondaryInk.opacity(0.5)
+    }
+
+    private func accessLabel(_ state: BrowserAccessState) -> String {
+        switch state {
+        case .notConnected: "Not connected"
+        case .connected(let path): path
+        case .needsAccess(let message): message
+        }
+    }
+
+    private func accessButtonTitle(_ state: BrowserAccessState) -> String {
+        switch state {
+        case .notConnected: "Connect"
+        case .connected: "Change"
+        case .needsAccess: "Reconnect"
         }
     }
 }

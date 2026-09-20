@@ -7,30 +7,13 @@ public enum Permissions {
         case granted, denied, notRunning, unknown
     }
 
-    /// FDA probe: can we actually read bytes from a TCC-protected file?
-    public static func hasFullDiskAccess() -> Bool {
-        let probe = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Safari/History.db")
-        guard let fh = try? FileHandle(forReadingFrom: probe) else {
-            return false
-        }
-        defer { try? fh.close() }
-        return (try? fh.read(upToCount: 16)) != nil
-    }
-
-    /// Per-browser Automation consent. Only probes running browsers —
-    /// sending Apple events to a non-running app would launch it.
+    /// Per-browser Automation consent. NSRunningApplication avoids scripting
+    /// System Events; the browser probe runs only when that exact app is open.
     public static func automationState(
-        for scriptName: String
+        bundleID: String, scriptName: String
     ) -> AutomationState {
-        let script = NSAppleScript(source: """
-            tell application "System Events" to get exists \
-            (first process whose name is "\(scriptName)")
-        """)
-        var err: NSDictionary?
-        let running = script?.executeAndReturnError(&err)
-            .booleanValue ?? false
-        guard running else { return .notRunning }
+        guard !NSRunningApplication.runningApplications(
+            withBundleIdentifier: bundleID).isEmpty else { return .notRunning }
 
         let probe = NSAppleScript(source: """
             tell application "\(scriptName)" to count windows
@@ -40,11 +23,6 @@ public enum Permissions {
         guard let e = probeErr else { return .granted }
         let code = e[NSAppleScript.errorNumber] as? Int ?? 0
         return code == -1743 ? .denied : .granted  // -1719 no window = granted
-    }
-
-    public static func openFullDiskAccessSettings() {
-        NSWorkspace.shared.open(URL(string:
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
     }
 
     public static func openAutomationSettings() {

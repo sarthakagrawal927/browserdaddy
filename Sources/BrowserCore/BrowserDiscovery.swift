@@ -1,80 +1,66 @@
 import Foundation
 
-/// Finds on-disk history stores for installed browsers. Port of the Python
-/// discover() — including the stat-probe fallback that works when TCC blocks
-/// directory listing but not stat().
+/// Finds history stores only below browser roots explicitly selected by a user.
 public enum BrowserDiscovery {
-    private static let home = FileManager.default.homeDirectoryForCurrentUser
-    private static let appSupport = home
-        .appendingPathComponent("Library/Application Support")
+    public static func isValid(root: BrowserRoot) -> Bool {
+        !discover(root: root).isEmpty
+    }
 
-    private static let chromiumRoots: [(browser: String, path: String)] = [
-        ("chrome", "Google/Chrome"),
-        ("brave", "BraveSoftware/Brave-Browser"),
-        ("edge", "Microsoft Edge"),
-        ("vivaldi", "Vivaldi"),
-        ("opera", "com.operasoftware.Opera"),
-        ("chromium", "Chromium"),
-        ("arc", "Arc/User Data"),
-    ]
+    public static func discover(roots: [BrowserRoot]) -> [HistorySource] {
+        roots.flatMap(discover(root:))
+    }
 
-    public static func discover() -> [HistorySource] {
+    public static func discover(root: BrowserRoot) -> [HistorySource] {
         var sources: [HistorySource] = []
         let fm = FileManager.default
+        let selected = root.url.standardizedFileURL.resolvingSymlinksInPath()
 
-        for (browser, rel) in chromiumRoots {
-            let root = appSupport.appendingPathComponent(rel)
-            guard fm.fileExists(atPath: root.path) else { continue }
-
+        switch root.kind {
+        case .firefox:
+            guard let profiles = try? fm.contentsOfDirectory(
+                at: selected, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
+            for profile in profiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                let db = profile.appendingPathComponent("places.sqlite")
+                if isReadableDescendant(db, of: selected) {
+                    sources.append(HistorySource(browser: root.kind.rawValue,
+                        profile: profile.lastPathComponent, path: db, engine: .firefox))
+                }
+            }
+        case .safari:
+            let db = selected.appendingPathComponent("History.db")
+            if isReadableDescendant(db, of: selected) {
+                sources.append(HistorySource(browser: root.kind.rawValue,
+                    profile: "default", path: db, engine: .safari))
+            }
+        default:
             let profiles: [URL]
-            if browser == "opera" {
-                profiles = [root]
+            if root.kind == .opera {
+                profiles = [selected]
             } else if let listing = try? fm.contentsOfDirectory(
-                at: root, includingPropertiesForKeys: nil) {
+                at: selected, includingPropertiesForKeys: [.isDirectoryKey]) {
                 profiles = listing.filter {
                     (try? $0.resourceValues(forKeys: [.isDirectoryKey])
                         .isDirectory) == true && !$0.lastPathComponent.hasPrefix(".")
                 }.sorted { $0.lastPathComponent < $1.lastPathComponent }
             } else {
-                // TCC blocks listing but stat() still works — probe names.
-                let probe = ["Default", "Guest Profile"]
-                    + (1...10).map { "Profile \($0)" }
-                profiles = probe.map { root.appendingPathComponent($0) }
-                    .filter { fm.fileExists(
-                        atPath: $0.appendingPathComponent("History").path) }
+                return []
             }
-            for prof in profiles {
-                let h = prof.appendingPathComponent("History")
-                if fm.fileExists(atPath: h.path) {
-                    sources.append(HistorySource(
-                        browser: browser, profile: prof.lastPathComponent,
-                        path: h, engine: .chromium))
+            for profile in profiles {
+                let db = profile.appendingPathComponent("History")
+                if isReadableDescendant(db, of: selected) {
+                    sources.append(HistorySource(browser: root.kind.rawValue,
+                        profile: profile.lastPathComponent, path: db, engine: .chromium))
                 }
             }
-        }
-
-        // Firefox
-        let ffRoot = appSupport.appendingPathComponent("Firefox/Profiles")
-        if let profiles = try? fm.contentsOfDirectory(
-            at: ffRoot, includingPropertiesForKeys: nil) {
-            for prof in profiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                let db = prof.appendingPathComponent("places.sqlite")
-                if fm.fileExists(atPath: db.path) {
-                    sources.append(HistorySource(
-                        browser: "firefox", profile: prof.lastPathComponent,
-                        path: db, engine: .firefox))
-                }
-            }
-        }
-
-        // Safari
-        let safari = home.appendingPathComponent("Library/Safari/History.db")
-        if fm.fileExists(atPath: safari.path) {
-            sources.append(HistorySource(
-                browser: "safari", profile: "default",
-                path: safari, engine: .safari))
         }
         return sources
+    }
+
+    private static func isReadableDescendant(_ candidate: URL, of root: URL) -> Bool {
+        let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath()
+        let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        return resolved.path.hasPrefix(rootPath)
+            && FileManager.default.isReadableFile(atPath: resolved.path)
     }
 
     /// Copy the DB (+wal/shm) to a temp dir — a running browser's lock

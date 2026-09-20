@@ -1,5 +1,24 @@
 # BrowserDaddy — project status
 
+## 2026-09-20 — browser-scoped folder grants
+
+BrowserDaddy no longer requests Full Disk Access or scans browser locations
+implicitly. Each connected browser uses a user-selected, read-only,
+security-scoped folder bookmark. Discovery is restricted to that resolved root,
+rejects symlink escapes and validates that the folder contains the expected
+history database before persisting a grant. Disconnect stops future reads while
+preserving already archived rows. The release entitlement set now enables App
+Sandbox, read-only user-selected files, app-scoped bookmarks, outbound networking
+for the optional classifier, and the Chrome-only Apple Events exception.
+
+The first sandboxed release includes Apple's container migration manifest for the
+existing BrowserDaddy Application Support directory. A separate sandbox probe
+using a synthetic Chromium database verified onboarding, persistent bookmark
+resolution after relaunch, extraction, and archive retention after disconnect.
+No personal browser folder was selected or personal screenshot captured. All 26
+Swift package tests pass. Tracking: GitHub issue #4. Signed migration and installed
+runtime qualification are the remaining release steps.
+
 ## 2026-09-20 — signed native candidate and corrected optional consent
 
 Owner approved optional external classification with accurate, revocable consent.
@@ -65,8 +84,9 @@ executable + XCTest. StorageDaddy visual language throughout — black
 surfaces, mint accent, banded cards, doodle artwork.
 
 Prototype reference at ~/browserdaddy/ (Python): extract.py, watch.py,
-stats.py, out/browserdaddy.db (~109k archived visits). The app ports
-that pipeline natively and imports the existing archive DB on first boot.
+stats.py and its historical archive. The app ports that pipeline natively.
+The stable native archive is migrated into the sandbox container on the first
+sandboxed release launch.
 
 Repo: github.com/sarthakagrawal927/browserdaddy (private).
 Tracking: issue #1.
@@ -77,17 +97,17 @@ Tracking: issue #1.
 - BrowserCore: SQLite store (recursive-locked, Sendable-safe), archive
   schema (visits/searches/focus/meta/domain_categories/page_categories),
   merge-dedupe on (browser, profile, visit_id)
-- Discovery: all Chromium roots + profiles (stat-probe fallback),
-  Firefox, Safari; snapshot past SQLite locks
+- Discovery below explicitly connected, read-only browser roots only;
+  Chromium profiles, Firefox and Safari; symlink-escape rejection and
+  snapshots past SQLite locks
 - Three engine extractors + epoch normalization; omnibox search terms
 - FocusWatcher: NSWorkspace frontmost polling + AppleScript tab URL +
   CGEventSource idle gating → focus segments (2s ticks, 60s idle,
   3-miss tolerance, real elapsed dt, blip dropping, name map)
-- Auto-extract on boot + every 6h (launchd not required); first-boot
-  import of the python archive
+- Auto-extract on boot + every 6h (launchd not required)
 
 **App surfaces**
-- Onboarding: FDA grant step, automation explainer, honest-collection
+- Onboarding: per-browser folder grants, automation explainer, honest-collection
   summary, opt-in tagging (one-shot, until meta.onboarded)
 - Attention page: NOW (live app+tab), per-day timeline strip, WHERE IT
   GOES (apps/sites, active vs open), PATTERN (hourly)
@@ -102,7 +122,7 @@ Tracking: issue #1.
   return speed), DEPTH (concentration), SHARED (cross-browser),
   PACE (switch rate, median span), SESSIONS, SEARCHES
 - History: search + per-browser filter
-- Permissions: FDA status, per-browser Automation state, sync trigger,
+- Permissions: per-browser Connect/Change/Disconnect, Automation state, sync trigger,
   launch-at-login, TAGGING toggle + Tag button
 - Global filters: source (browser/profile) + range (7/30/90d/all) —
   every band honors them; all grouping in local time
@@ -120,7 +140,8 @@ Tracking: issue #1.
   names / page titles only
 - Private browsing is never reconstructed; visits ≠ attention — focus
   data is the real attention signal and only exists from watcher start
-- Read-only on browser stores; no launchd requirement; native APIs only
+- Sandboxed and read-only on user-selected browser stores; no Full Disk Access,
+  launchd requirement or implicit home-directory discovery; native APIs only
 
 ## Known thin spots / next steps
 

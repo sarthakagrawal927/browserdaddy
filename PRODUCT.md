@@ -29,8 +29,10 @@ survives browser pruning because the archive merges, never replaces.
 
 ### Permissions & onboarding
 
-Full Disk Access check + guided grant flow (history reads), per-browser
-Automation consent status (tab URL reads), launch-at-login toggle.
+Read-only macOS folder pickers for only the browser roots a person chooses,
+persistent and revocable security-scoped bookmarks, per-browser Automation
+consent status (tab URL reads), and a launch-at-login toggle. Full Disk Access
+is neither requested nor required.
 
 ## Non-goals
 

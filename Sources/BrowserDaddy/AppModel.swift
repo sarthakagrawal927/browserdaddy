@@ -1,14 +1,16 @@
 import Foundation
 import BrowserCore
 import ServiceManagement
+import AppKit
 
 @MainActor
 final class AppModel: ObservableObject {
     @Published var report: ReportEngine.Report?
     @Published var extracting = false
     @Published var extractLog: [String] = []
-    @Published var fda = false
     @Published var automation: [String: Permissions.AutomationState] = [:]
+    @Published var browserAccess: [BrowserAccessStatus] = []
+    @Published var browserAccessError = ""
     struct HistoryRow: Identifiable {
         let id = UUID()
         let time: Date?
@@ -51,13 +53,16 @@ final class AppModel: ObservableObject {
     private var classificationTask: Task<Void, Never>?
     static let classificationConsentVersion = "2"
     private let startCollectionOverride: (() -> Void)?
+    private let browserGrantStore: BrowserGrantStore
 
     init(store suppliedStore: ArchiveStore,
-         startCollection: (() -> Void)? = nil) {
+         startCollection: (() -> Void)? = nil,
+         browserGrantStore: BrowserGrantStore = BrowserGrantStore()) {
         store = suppliedStore
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
         startCollectionOverride = startCollection
+        self.browserGrantStore = browserGrantStore
         launchAtLogin = SMAppService.mainApp.status == .enabled
         needsOnboarding = store.metaGet("onboarded") != "1"
         classifyOptin = store.metaGet("classify_optin") == "1"
@@ -86,7 +91,6 @@ final class AppModel: ObservableObject {
         }
         watcher.start()
         Task.detached(priority: .utility) { [store] in
-            _ = try? ArchiveImporter.importIfNeeded(into: store)
             await self.reload()
             await MainActor.run { self.reloadAttention() }
             await MainActor.run { self.loadFocusDay() }
@@ -100,17 +104,72 @@ final class AppModel: ObservableObject {
     }
 
     func refreshPermissions() {
+        refreshBrowserAccess()
         Task.detached(priority: .utility) {
-            let fda = Permissions.hasFullDiskAccess()
             var states: [String: Permissions.AutomationState] = [:]
-            for (_, scriptName) in FocusWatcher.tabCapableBrowsers {
-                states[scriptName] = Permissions.automationState(for: scriptName)
+            for (bundleID, scriptName) in FocusWatcher.tabCapableBrowsers {
+                states[scriptName] = Permissions.automationState(
+                    bundleID: bundleID, scriptName: scriptName)
             }
             await MainActor.run {
-                self.fda = fda
                 self.automation = states
             }
         }
+    }
+
+    var visibleBrowserKinds: [BrowserKind] {
+        let connected = Set(browserGrantStore.grants().map(\.kind))
+        return BrowserKind.allCases.filter {
+            connected.contains($0)
+                || NSWorkspace.shared.urlForApplication(
+                    withBundleIdentifier: $0.bundleIdentifier) != nil
+        }
+    }
+
+    var hasConnectedBrowser: Bool {
+        browserAccess.contains {
+            if case .connected = $0.state { return true }
+            return false
+        }
+    }
+
+    func refreshBrowserAccess() {
+        browserAccess = browserGrantStore.statuses(for: visibleBrowserKinds)
+    }
+
+    func connectBrowser(_ kind: BrowserKind) {
+        browserAccessError = ""
+        let panel = NSOpenPanel()
+        panel.title = "Connect \(kind.displayName)"
+        panel.message = kind.selectionHint
+        panel.prompt = "Connect read-only"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        var suggestion = kind.suggestedRoot
+        while !FileManager.default.fileExists(atPath: suggestion.path),
+              suggestion.pathComponents.count > 2 {
+            suggestion.deleteLastPathComponent()
+        }
+        panel.directoryURL = suggestion
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try self.browserGrantStore.save(kind: kind, selectedURL: url)
+                    self.refreshBrowserAccess()
+                    self.runExtract()
+                } catch {
+                    self.browserAccessError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func removeBrowser(_ kind: BrowserKind) {
+        browserGrantStore.remove(kind: kind)
+        refreshBrowserAccess()
     }
 
     func reload() async {
@@ -239,9 +298,22 @@ final class AppModel: ObservableObject {
         extracting = true
         extractLog = []
         let store = self.store
+        let grants = browserGrantStore
         Task.detached(priority: .utility) {
-            let results = HistoryExtractor.run(into: store) { line in
-                Task { @MainActor in self.extractLog.append(line) }
+            let results = grants.withAccessibleRoots { roots, failures in
+                for failure in failures {
+                    Task { @MainActor in
+                        self.extractLog.append("✗ \(failure.kind.displayName): \(failure.message)")
+                    }
+                }
+                if roots.isEmpty && failures.isEmpty {
+                    Task { @MainActor in
+                        self.extractLog.append("No browser folders connected. Open Permissions to add one.")
+                    }
+                }
+                return HistoryExtractor.run(into: store, roots: roots) { line in
+                    Task { @MainActor in self.extractLog.append(line) }
+                }
             }
             for r in results {
                 if let err = r.error {
@@ -252,6 +324,7 @@ final class AppModel: ObservableObject {
                 }
             }
             await MainActor.run { self.extracting = false }
+            await MainActor.run { self.refreshBrowserAccess() }
             await self.reload()
         }
     }

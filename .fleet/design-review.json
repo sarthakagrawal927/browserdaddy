@@ -32,19 +32,19 @@
       "purposeSource": "PRODUCT.md and PROJECT_STATUS.md; native source verification",
       "canonicalPurpose": "BrowserDaddy helps people understand their browsing history and attention locally across browsers.",
       "purposeAlignment": "match",
-      "driftNote": "Purpose contract reviewed in the canonical project dossier. Branding does not change product purpose, availability or privacy claims. Native classifier policy and release qualification remain open.",
+      "driftNote": "Purpose contract reviewed in the canonical project dossier. The scoped-folder permission flow preserves the approved native design and makes the privacy boundary explicit without changing the product purpose.",
       "audience": "Mac users reviewing their browsing history and attention",
       "job": "Recognize BrowserDaddy distinctly while retaining the owner-approved Daddy family",
       "thesis": "Browser-specific character and symbols, never the reused storage box",
-      "system": "Tab Scout implemented within existing black/mint SwiftUI and Editorial landing. Small marks use a simple face/browser-tab icon; large illustration preserves aspect ratio and alpha. No new UI library or runtime dependency.",
+      "system": "Tab Scout implemented within existing black/mint SwiftUI and Editorial landing. Browser access uses the existing band, row and button vocabulary for per-browser Connect, Change and Disconnect actions. Small marks use a simple face/browser-tab icon; large illustration preserves aspect ratio and alpha. No new UI library or runtime dependency.",
       "signature": "Tab-carrying scout, mint backpack and attention compass; own simplified browser-tab icon.",
-      "risk": "Generated mockups are illustrative, not release evidence; actual native theme, accessibility and truthful copy require verification after selection."
+      "risk": "Generated mockups are illustrative, not release evidence. The scoped-folder flow was inspected in a synthetic sandbox probe; final release qualification still requires signed migration and launch verification."
     }
   },
   "evidence": {
     "screenshots": [{"width":390,"path":".fleet/brand-evidence/landing-390.png"},{"width":768,"path":".fleet/brand-evidence/landing-768.png"},{"width":1440,"path":".fleet/brand-evidence/landing-1440.png"}],
     "projectCheck": {
-      "command": "XcodeBuildMCP swift_package_test: 15 passed; ios-landings pnpm check: 21 tests and 11 product builds/checks passed",
+      "command": "XcodeBuildMCP swift_package_test: 26 passed; scoped-folder onboarding and disconnect inspected in a synthetic sandbox probe; ios-landings pnpm check: 21 tests and 11 product builds/checks passed",
       "status": "pass"
     },
     "critique": {
@@ -88,6 +88,6 @@
   },
   "ownerFeedback": {
     "decision": "delegated",
-    "note": "Owner said any if fine after three directions. Selected A — Tab Scout for family continuity and browser-specific meaning; preserve established dark UI and Editorial landing."
+    "note": "Owner said any if fine after three directions. Selected A — Tab Scout for family continuity and browser-specific meaning; preserve established dark UI and Editorial landing. The later scoped-folder permission work remains within that approved system."
   }
 }

@@ -49,6 +49,8 @@ def main():
     shutil.copy2(binary, contents / "MacOS/BrowserDaddy")
     shutil.copytree(resources, contents / "Resources" / resources.name)
     shutil.copy2(ROOT / "Support/BrowserDaddy.icns", contents / "Resources/BrowserDaddy.icns")
+    shutil.copy2(ROOT / "Support/container-migration.plist",
+                 contents / "Resources/container-migration.plist")
     info = plistlib.loads((ROOT / "Support/Info.plist").read_bytes())
     info.update(CFBundleIdentifier="com.significanthobbies.browserdaddy",
                 CFBundleShortVersionString=args.version, CFBundleVersion=str(args.build))

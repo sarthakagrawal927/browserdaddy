@@ -708,7 +708,7 @@ struct DashboardView: View {
                 Text("No history archived yet")
                     .font(.largeTitle.bold()).foregroundStyle(BrowserTheme.ink)
                 Text("BrowserDaddy reads browser history into a permanent local archive. "
-                     + "Grant Full Disk Access, then sync.")
+                     + "Connect a browser folder in Permissions, then sync.")
                     .foregroundStyle(BrowserTheme.secondaryInk)
                     .multilineTextAlignment(.center).frame(maxWidth: 520)
             }

@@ -21,11 +21,12 @@ See PRODUCT.md for scope and AGENTS.md for boundaries.
 
 ## First launch
 
-Onboarding runs once: Full Disk Access (System Settings → Privacy &
-Security), per-browser Automation consent when you focus each browser,
-and an optional topic-tagging opt-in. Archive extraction runs on boot
-and every 6h; the focus watcher runs while the app is alive. First boot
-also imports the python archive at `~/browserdaddy/out/browserdaddy.db`.
+Onboarding runs once: read-only folder selection for each browser you choose,
+Chrome Automation consent for qualified normal-window tab capture, and an
+optional topic-tagging opt-in. Browser folder grants are stored as revocable,
+app-scoped security bookmarks. Full Disk Access is neither requested nor
+required. Archive extraction runs on boot and every 6h; the focus watcher runs
+while the app is alive.
 
 Classification (classifier.dev) is the app's only network call and only
 runs when you allow it — in onboarding or via Permissions → TAGGING.
@@ -49,6 +50,9 @@ it signs an isolated candidate, never installs or publishes it. Notarization,
 stapling, Gatekeeper checks and native runtime qualification are separate gates.
 Release bundles use `com.significanthobbies.browserdaddy`; development uses `.dev`.
 Moving from development to release may require new user-granted permissions.
+The release is sandboxed. `Support/container-migration.plist` copies the existing
+BrowserDaddy Application Support folder into the stable app container on its
+first sandboxed launch; packaging must retain that resource.
 
 Until the app holds its own grants, the python launchd agents stay as
 backstop collectors. Retire them once verified:

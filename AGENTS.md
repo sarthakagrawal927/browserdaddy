@@ -7,6 +7,10 @@ boundaries:
 - Sample and archive from measured evidence; never invent browsing activity.
 - Keep collection read-only. Never delete or modify browser history files,
   profiles, cookies, or any browser data.
+- Browser history access is limited to user-selected browser roots through
+  read-only security-scoped bookmarks. Never add Full Disk Access instructions,
+  file-access exceptions, implicit home-directory discovery, or path escape via
+  symlinks. Disconnecting a source stops future reads but preserves the archive.
 - Do not shell out to monitoring commands from the product. Use supported
   native macOS APIs (SQLite3, NSWorkspace, NSAppleScript, CGEventSource) and
   disclose unavailable evidence.

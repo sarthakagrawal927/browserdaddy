@@ -43,13 +43,19 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ACCESS").font(.caption.weight(.semibold))
                 .foregroundStyle(BrowserTheme.secondaryInk)
-            row(
-                ok: model.fda,
-                title: "Full Disk Access",
-                body: "Needed to read browser history databases. "
-                      + "Grant it, then relaunch — the archive imports on boot.",
-                actionTitle: "Open Settings",
-                action: { Permissions.openFullDiskAccessSettings() })
+            Text("Choose only the browser folders you want archived. Access is "
+                 + "read-only, can be removed later, and never includes the rest of your disk.")
+                .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
+            ForEach(model.browserAccess) { status in
+                row(ok: isConnected(status.state), title: status.kind.displayName,
+                    body: accessLabel(status.state),
+                    actionTitle: isConnected(status.state) ? "Change" : "Connect",
+                    action: { model.connectBrowser(status.kind) })
+            }
+            if !model.browserAccessError.isEmpty {
+                Text(model.browserAccessError).font(.caption)
+                    .foregroundStyle(BrowserTheme.coral)
+            }
             row(
                 ok: true,
                 title: "Browser automation",
@@ -69,7 +75,7 @@ struct OnboardingView: View {
                   systemImage: "eye")
             Label("Private browsing is never reconstructed.",
                   systemImage: "hand.raised")
-            Label("Everything stays in a SQLite file on this Mac.",
+            Label("The archive stays in a SQLite file on this Mac.",
                   systemImage: "lock.shield")
         }
         .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
@@ -110,11 +116,24 @@ struct OnboardingView: View {
     private var footer: some View {
         HStack {
             Spacer()
-            Button(model.fda ? "Start watching" : "Continue anyway") {
+            Button(model.hasConnectedBrowser ? "Start watching" : "Continue without history") {
                 model.finishOnboarding()
             }
             .buttonStyle(PrimaryActionButtonStyle())
             .controlSize(.large)
+        }
+    }
+
+    private func isConnected(_ state: BrowserAccessState) -> Bool {
+        if case .connected = state { return true }
+        return false
+    }
+
+    private func accessLabel(_ state: BrowserAccessState) -> String {
+        switch state {
+        case .notConnected: "Not connected. Choose this browser’s history folder."
+        case .connected(let path): path
+        case .needsAccess(let message): message
         }
     }
 

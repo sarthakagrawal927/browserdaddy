@@ -114,9 +114,10 @@ public enum HistoryExtractor {
     /// per-source results for the UI (blocked sources included).
     public static func run(
         into store: ArchiveStore,
+        roots: [BrowserRoot],
         onProgress: ((String) -> Void)? = nil
     ) -> [(source: HistorySource, inserted: Int, error: String?)] {
-        let sources = BrowserDiscovery.discover()
+        let sources = BrowserDiscovery.discover(roots: roots)
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(
@@ -135,7 +136,7 @@ public enum HistoryExtractor {
             } catch let e as DBError {
                 results.append((src, 0, e.message))
             } catch {
-                results.append((src, 0, "permission denied (grant Full Disk Access)"))
+                results.append((src, 0, "folder became unreadable; reconnect this browser"))
             }
         }
         return results

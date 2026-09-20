@@ -10,6 +10,18 @@ final class AppStartup: ObservableObject {
     }
 }
 
+private struct BrowserDaddyContent: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        Group {
+            if model.needsOnboarding { OnboardingView() }
+            else { RootView() }
+        }
+        .environmentObject(model)
+    }
+}
+
 @main
 struct BrowserDaddyApp: App {
     @StateObject private var startup = AppStartup()
@@ -18,11 +30,7 @@ struct BrowserDaddyApp: App {
         WindowGroup("browserdaddy") {
             Group {
                 if let model = startup.model {
-                    Group {
-                        if model.needsOnboarding { OnboardingView() }
-                        else { RootView() }
-                    }
-                    .environmentObject(model)
+                    BrowserDaddyContent(model: model)
                     .onAppear { model.boot() }
                 } else {
                     ContentUnavailableView {
@@ -122,13 +130,6 @@ struct RootView: View {
             }
 
             Spacer(minLength: 12)
-
-            VStack(alignment: .leading, spacing: 7) {
-                navigationHeading("DADDY SERIES")
-                Text("On your Mac. Under your control.").font(.caption)
-                Text("Private browsing stays private.").font(.caption)
-            }
-            .foregroundStyle(BrowserTheme.secondaryInk)
         }
         .padding(.horizontal, 15).padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
