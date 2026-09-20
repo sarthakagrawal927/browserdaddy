@@ -16,8 +16,18 @@ existing BrowserDaddy Application Support directory. A separate sandbox probe
 using a synthetic Chromium database verified onboarding, persistent bookmark
 resolution after relaunch, extraction, and archive retention after disconnect.
 No personal browser folder was selected or personal screenshot captured. All 26
-Swift package tests pass. Tracking: GitHub issue #4. Signed migration and installed
-runtime qualification are the remaining release steps.
+Swift package tests pass.
+
+Universal 0.2.0 build 3 was Developer ID signed, notarized and stapled. Apple
+accepted the app submission `5dcba543-bb61-4907-8951-23d84fe6d15c` and final DMG
+submission `d3dc616b-2430-47e3-8caf-3600f13fa83e`; Gatekeeper accepted both. The
+installed 0.1.0 app and archive were backed up before replacement. On first launch,
+macOS moved the archive into the stable sandbox container; SQLite integrity passed
+and aggregate rows matched the backup (with one expected new focus row after the
+watcher started). The legacy archive backup remains under Application Support.
+Installed 0.2.0 build 3 launched as PID 82508 and remained running. Tracking:
+GitHub issue #4. Actual browser-folder selection and owner-observed Chrome
+normal/private-window acceptance remain before any public download.
 
 ## 2026-09-20 — signed native candidate and corrected optional consent
 
