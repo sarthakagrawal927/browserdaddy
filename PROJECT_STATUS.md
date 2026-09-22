@@ -1,5 +1,31 @@
 # BrowserDaddy — project status
 
+## 2026-09-22 — 0.3.0 build 3: attention alerts + sync feedback
+
+Owner report: "Sync History" appeared dead and live mode seemed off. Evidence
+showed the watcher was healthy (focus rows seconds old) but the app had zero
+browser-folder grants, so sync was a no-op whose only feedback rendered on
+Permissions. Fixes: last extract-log line now shows in the global status bar;
+connect accepts a directly-selected profile dir (Chrome/Default, a Firefox
+profile); the NOW card no longer calls a tab-less browser "not a browser";
+and the watcher holds a `userInitiatedAllowingIdleSystemSleep` activity token
+so App Nap cannot suspend polling.
+
+New `AlertEngine` (BrowserCore) fires local UNUserNotificationCenter alerts on
+persisted thresholds: focused minutes/day, per-site caps, unbroken-page
+streaks, and a separate agent-suspected tally (scriptable-browser URL churn
+with <5% input — non-Chrome browsers can't qualify, disclosed in UI). Rules
+fire once per day and survive restart via `meta` markers. Config lives in
+`meta.alerts.config`; editable in the Permissions ALERTS band and the new
+Settings scene (⌘,). Delivery is injected so tests stay hermetic; 37 package
+tests pass (7 new).
+
+Release: universal DMG, Developer ID signed, notarization `8028766a` accepted,
+stapled; SHA256 `864b2c9e…36dd99`. Feed republished via prepare-appcast →
+`site/public/updates` → `wrangler deploy` (build number bumps to 3 — Sparkle
+compares `sparkle:version`, so builds are global-monotonic, not per-version).
+Tag `v0.3.0-3` pushed; private GitHub release holds the DMG.
+
 ## 2026-09-20 — first update release 0.2.2 build 2
 
 BrowserDaddy 0.2.2 (build 2) is the first Sparkle-enabled release. Universal
