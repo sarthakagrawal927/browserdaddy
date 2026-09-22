@@ -67,6 +67,8 @@ final class AppModel: ObservableObject {
     let store: ArchiveStore
     let engine: ReportEngine
     let watcher: FocusWatcher
+    let alerts: AlertEngine
+    @Published var alertConfig = AlertConfig()
     private var didStartCollection = false
     private var classificationTask: Task<Void, Never>?
     static let classificationConsentVersion = "2"
@@ -79,6 +81,9 @@ final class AppModel: ObservableObject {
         store = suppliedStore
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
+        alerts = AlertEngine(store: store)
+        alertConfig = alerts.config()
+        alerts.deliver = AlertDelivery.post
         startCollectionOverride = startCollection
         self.browserGrantStore = browserGrantStore
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -119,6 +124,20 @@ final class AppModel: ObservableObject {
             [weak self] _ in
             Task { @MainActor in self?.runExtract() }
         }
+        // Attention thresholds — cheap scan of today's focus rows.
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) {
+            [weak self] _ in
+            guard let self else { return }
+            Task.detached(priority: .utility) { self.alerts.evaluate() }
+        }
+    }
+
+    /// Persist alert thresholds; enabling asks macOS for notification consent.
+    func setAlertConfig(_ cfg: AlertConfig) {
+        let enabling = cfg.enabled && !alertConfig.enabled
+        alertConfig = cfg
+        alerts.saveConfig(cfg)
+        if enabling { AlertDelivery.requestAuthorization() }
     }
 
     func refreshPermissions() {

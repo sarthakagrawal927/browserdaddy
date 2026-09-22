@@ -114,6 +114,22 @@ struct BrowserDaddyApp: App {
                     .disabled(startup.model == nil)
             }
         }
+
+        Settings {
+            Group {
+                if let model = startup.model {
+                    AlertSettingsView()
+                        .environmentObject(model)
+                } else {
+                    Text("Archive unavailable — reopen the app.")
+                        .foregroundStyle(BrowserTheme.secondaryInk)
+                }
+            }
+            .padding(24).frame(width: 480)
+            .preferredColorScheme(.dark)
+            .tint(BrowserTheme.action)
+            .buttonStyle(DaddyButtonStyle())
+        }
     }
 }
 
@@ -230,6 +246,13 @@ struct RootView: View {
     private var statusBar: some View {
         HStack(spacing: 14) {
             Text(statusText).lineLimit(1)
+            if let last = model.extractLog.last {
+                Text(last).lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(last.hasPrefix("✗")
+                                     ? BrowserTheme.coral
+                                     : BrowserTheme.secondaryInk)
+                    .frame(maxWidth: 420, alignment: .leading)
+            }
             Spacer()
             if let r = model.report {
                 Text("\(r.totalVisits.formatted()) visits")

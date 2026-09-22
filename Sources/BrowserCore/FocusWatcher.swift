@@ -35,6 +35,8 @@ public final class FocusWatcher: @unchecked Sendable {
     private let queue = DispatchQueue(label: "browserdaddy.focus",
                                       qos: .utility)
     private var timer: DispatchSourceTimer?
+    /// Held while watching so App Nap can't suspend the poll timer.
+    private var activity: NSObjectProtocol?
     private var current: (id: Int64, app: String, url: String)?
     private var lastPoll = Date()
     public private(set) var isRunning = false
@@ -46,6 +48,9 @@ public final class FocusWatcher: @unchecked Sendable {
 
     public func start() {
         guard timer == nil else { return }
+        activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep],
+            reason: "Measuring frontmost app focus")
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: Self.interval)
         t.setEventHandler { [weak self] in self?.poll() }
@@ -57,6 +62,8 @@ public final class FocusWatcher: @unchecked Sendable {
     public func stop() {
         timer?.cancel()
         timer = nil
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
         isRunning = false
         closeSegment()
     }

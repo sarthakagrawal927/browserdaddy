@@ -17,6 +17,12 @@ public enum BrowserDiscovery {
 
         switch root.kind {
         case .firefox:
+            // The user may select either the Profiles folder or one profile dir.
+            let own = selected.appendingPathComponent("places.sqlite")
+            if isReadableDescendant(own, of: selected) {
+                return [HistorySource(browser: root.kind.rawValue,
+                    profile: selected.lastPathComponent, path: own, engine: .firefox)]
+            }
             guard let profiles = try? fm.contentsOfDirectory(
                 at: selected, includingPropertiesForKeys: [.isDirectoryKey]) else { return [] }
             for profile in profiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
@@ -33,6 +39,13 @@ public enum BrowserDiscovery {
                     profile: "default", path: db, engine: .safari))
             }
         default:
+            // Accept a profile dir itself (e.g. Chrome's "Default") — its
+            // History file sits inside, not in a child folder.
+            let own = selected.appendingPathComponent("History")
+            if isReadableDescendant(own, of: selected) {
+                return [HistorySource(browser: root.kind.rawValue,
+                    profile: selected.lastPathComponent, path: own, engine: .chromium)]
+            }
             let profiles: [URL]
             if root.kind == .opera {
                 profiles = [selected]

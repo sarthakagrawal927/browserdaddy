@@ -5,6 +5,15 @@ import BrowserCore
 struct AttentionView: View {
     @EnvironmentObject private var model: AppModel
 
+    /// Why the URL line is empty: unreadable tab vs. frontmost app isn't a browser.
+    private var nowSubtitle: String {
+        if model.nowApp.isEmpty { return "Waiting for the first poll" }
+        if FocusWatcher.scriptableBrowsers.values.contains(model.nowApp) {
+            return "Tab URL unavailable — app-level time still counts"
+        }
+        return "Not a browser — or no window open"
+    }
+
     private func pct(_ n: Int64, of total: Int64) -> String {
         guard total > 0 else { return "0%" }
         let p = 100.0 * Double(n) / Double(total)
@@ -50,9 +59,7 @@ struct AttentionView: View {
                         .foregroundStyle(BrowserTheme.mintInk)
                         .lineLimit(1).truncationMode(.middle)
                 } else {
-                    Text(model.nowApp.isEmpty
-                         ? "Waiting for the first poll"
-                         : "Not a browser — or no window open")
+                    Text(nowSubtitle)
                         .font(.callout)
                         .foregroundStyle(BrowserTheme.secondaryInk)
                 }

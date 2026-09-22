@@ -10,6 +10,7 @@ struct PermissionsView: View {
                 access
                 automation
                 collection
+                alerts
                 tagging
                 data
             }
@@ -115,6 +116,13 @@ struct PermissionsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var alerts: some View {
+        BrowserBand(label: "ALERTS",
+                    subtitle: "Local notifications on measured attention — nothing leaves the Mac") {
+            AlertSettingsView()
         }
     }
 
