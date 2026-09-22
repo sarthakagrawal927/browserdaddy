@@ -70,6 +70,7 @@ final class AppModel: ObservableObject {
     let alerts: AlertEngine
     @Published var alertConfig = AlertConfig()
     private var didStartCollection = false
+    private var lastExtractAt = Date.distantPast
     private var classificationTask: Task<Void, Never>?
     static let classificationConsentVersion = "2"
     private let startCollectionOverride: (() -> Void)?
@@ -119,10 +120,16 @@ final class AppModel: ObservableObject {
             await MainActor.run { self.loadFocusDay() }
             await self.runExtract()   // first-boot archive pass
         }
-        // Archive stays fresh without launchd: re-extract while running.
-        Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) {
+        // Archive stays fresh without launchd: re-extract while running,
+        // and again when the app is activated with a stale pass.
+        Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) {
             [weak self] _ in
             Task { @MainActor in self?.runExtract() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.extractIfStale() }
         }
         // Attention thresholds — cheap scan of today's focus rows.
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) {
@@ -175,6 +182,30 @@ final class AppModel: ObservableObject {
     }
 
     func connectBrowser(_ kind: BrowserKind) {
+        presentConnectPanel(for: kind) { }
+    }
+
+    /// Wizard-style: panel for every detected-but-unconnected browser,
+    /// back to back, each pre-opened at its data folder.
+    func connectAllBrowsers() {
+        let pending = visibleBrowserKinds.filter { kind in
+            guard let status = browserAccess.first(where: { $0.kind == kind })
+            else { return true }
+            if case .connected = status.state { return false }
+            return true
+        }
+        connectNext(pending)
+    }
+
+    private func connectNext(_ queue: [BrowserKind]) {
+        guard let kind = queue.first else { return }
+        presentConnectPanel(for: kind) { [weak self] in
+            self?.connectNext(Array(queue.dropFirst()))
+        }
+    }
+
+    private func presentConnectPanel(for kind: BrowserKind,
+                                     then done: @escaping () -> Void) {
         browserAccessError = ""
         let panel = NSOpenPanel()
         panel.title = "Connect \(kind.displayName)"
@@ -190,9 +221,10 @@ final class AppModel: ObservableObject {
         }
         panel.directoryURL = suggestion
         panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                defer { done() }
+                guard response == .OK, let url = panel.url else { return }
                 do {
                     try self.browserGrantStore.save(kind: kind, selectedURL: url)
                     self.refreshBrowserAccess()
@@ -276,7 +308,16 @@ final class AppModel: ObservableObject {
     func finishOnboarding() {
         store.metaSet("onboarded", "1")
         needsOnboarding = false
+        let replaying = didStartCollection
         boot()
+        // On replay boot() early-returns — still extract any new grants.
+        if replaying { runExtract() }
+    }
+
+    /// Re-show the first-run flow (Settings → "Review first-run setup").
+    /// Collection keeps running; finishing re-persists onboarded and no-ops boot.
+    func replayOnboarding() {
+        needsOnboarding = true
     }
 
     /// Manual domain tag — persisted as source='user', survives tag runs.
@@ -379,9 +420,15 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Sync on activation only when the last pass is older than the timer.
+    private func extractIfStale() {
+        if Date().timeIntervalSince(lastExtractAt) > 30 * 60 { runExtract() }
+    }
+
     func runExtract() {
         guard !needsOnboarding, !extracting else { return }
         extracting = true
+        lastExtractAt = Date()
         extractLog = []
         let store = self.store
         let grants = browserGrantStore

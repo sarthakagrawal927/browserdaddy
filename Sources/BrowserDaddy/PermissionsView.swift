@@ -31,6 +31,12 @@ struct PermissionsView: View {
                 ForEach(model.browserAccess) { status in
                     browserRow(status)
                 }
+                HStack {
+                    Spacer()
+                    Button("Connect all detected browsers") {
+                        model.connectAllBrowsers()
+                    }
+                }
                 if !model.browserAccessError.isEmpty {
                     Text(model.browserAccessError)
                         .font(.caption).foregroundStyle(BrowserTheme.coral)
@@ -45,10 +51,10 @@ struct PermissionsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(status.kind.displayName).font(.callout.weight(.semibold))
                     .foregroundStyle(BrowserTheme.ink)
-                Text(accessLabel(status.state)).font(.caption)
+                Text(accessLabel(status)).font(.caption)
                     .foregroundStyle(BrowserTheme.secondaryInk)
                     .lineLimit(1).truncationMode(.middle)
-                    .help(accessLabel(status.state))
+                    .help(accessLabel(status))
             }
             Spacer()
             Button(accessButtonTitle(status.state)) {
@@ -203,9 +209,10 @@ struct PermissionsView: View {
         return BrowserTheme.secondaryInk.opacity(0.5)
     }
 
-    private func accessLabel(_ state: BrowserAccessState) -> String {
-        switch state {
-        case .notConnected: "Not connected"
+    private func accessLabel(_ status: BrowserAccessStatus) -> String {
+        switch status.state {
+        case .notConnected:
+            "Not connected — \(status.kind.connectDirections)"
         case .connected(let path): path
         case .needsAccess(let message): message
         }

@@ -52,8 +52,27 @@ public enum BrowserKind: String, CaseIterable, Codable, Identifiable, Sendable {
     public var selectionHint: String {
         switch self {
         case .safari: "Select the Safari folder containing History.db."
-        case .firefox: "Select Firefox’s Profiles folder."
-        default: "Select the browser data folder containing profile History files."
+        case .firefox: "Select the Profiles folder — or one profile folder inside it."
+        default: "This folder holds the browser profiles. Select it — or one profile folder inside it — then Connect."
+        }
+    }
+
+    /// "~"-abbreviated suggested folder, for directions copy.
+    public var displayPath: String {
+        suggestedRoot.path.replacingOccurrences(
+            of: FileManager.default.homeDirectoryForCurrentUser.path,
+            with: "~")
+    }
+
+    /// Exactly what to select when connecting, with the concrete path.
+    public var connectDirections: String {
+        switch self {
+        case .safari:
+            return "pick \(displayPath) — it contains History.db"
+        case .firefox:
+            return "pick \(displayPath), or one profile folder inside it"
+        default:
+            return "pick \(displayPath) — or a single profile folder inside it"
         }
     }
 }

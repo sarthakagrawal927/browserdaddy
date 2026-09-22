@@ -46,9 +46,17 @@ struct OnboardingView: View {
             Text("Choose only the browser folders you want archived. Access is "
                  + "read-only, can be removed later, and never includes the rest of your disk.")
                 .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
+            Text("For each browser: Connect → the panel opens at the right "
+                 + "folder → choose it → “Connect read-only”.")
+                .font(.caption).foregroundStyle(BrowserTheme.mintInk)
+            Button("Connect all detected browsers") {
+                model.connectAllBrowsers()
+            }
+            .buttonStyle(DaddyButtonStyle(prominent: true))
+            .disabled(model.browserAccess.isEmpty)
             ForEach(model.browserAccess) { status in
                 row(ok: isConnected(status.state), title: status.kind.displayName,
-                    body: accessLabel(status.state),
+                    body: accessLabel(status),
                     actionTitle: isConnected(status.state) ? "Change" : "Connect",
                     action: { model.connectBrowser(status.kind) })
             }
@@ -129,9 +137,9 @@ struct OnboardingView: View {
         return false
     }
 
-    private func accessLabel(_ state: BrowserAccessState) -> String {
-        switch state {
-        case .notConnected: "Not connected. Choose this browser’s history folder."
+    private func accessLabel(_ status: BrowserAccessStatus) -> String {
+        switch status.state {
+        case .notConnected: "Not connected — \(status.kind.connectDirections)."
         case .connected(let path): path
         case .needsAccess(let message): message
         }

@@ -118,8 +118,18 @@ struct BrowserDaddyApp: App {
         Settings {
             Group {
                 if let model = startup.model {
-                    AlertSettingsView()
-                        .environmentObject(model)
+                    VStack(alignment: .leading, spacing: 18) {
+                        AlertSettingsView()
+                        Divider().overlay(BrowserTheme.divider)
+                        Button("Review first-run setup…") {
+                            model.replayOnboarding()
+                        }
+                        Text("Reopens onboarding — connect browsers, review "
+                             + "what's collected.")
+                            .font(.caption)
+                            .foregroundStyle(BrowserTheme.secondaryInk)
+                    }
+                    .environmentObject(model)
                 } else {
                     Text("Archive unavailable — reopen the app.")
                         .foregroundStyle(BrowserTheme.secondaryInk)
