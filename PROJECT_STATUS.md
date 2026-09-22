@@ -1,5 +1,17 @@
 # BrowserDaddy — project status
 
+## 2026-09-22 — 0.3.1 build 4: guided connect + faster auto-sync
+
+Onboarding/Permissions now give exact per-browser folder directions and a
+"Connect all detected browsers" wizard walks each unconnected browser with
+the panel pre-opened at its data folder — the user-mediated pick stays the
+security grant (sandbox boundary unchanged). Re-extract cadence 6h → 30min
+plus a stale-check sync on app activation. Settings gains "Review first-run
+setup" replay; finishing a replay extracts new grants immediately.
+
+Universal DMG, Developer ID signed, notarization `f658a119` accepted, stapled.
+Feed republished (sparkle:version 4). Tag `v0.3.1-4`, private GitHub release.
+
 ## 2026-09-22 — 0.3.0 build 3: attention alerts + sync feedback
 
 Owner report: "Sync History" appeared dead and live mode seemed off. Evidence
