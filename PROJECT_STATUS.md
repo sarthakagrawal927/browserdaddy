@@ -1,5 +1,22 @@
 # BrowserDaddy — project status
 
+## 2026-09-25 — 0.4.0 build 5: link router + tabs shipped
+
+Released the link router, picker, and Tabs workspace described below.
+Universal DMG `BrowserDaddy-0.4.0-5-universal.dmg`, Developer ID signed,
+hardened runtime, notarization `3814a25e` accepted and stapled; installed
+to /Applications. Hardening applied during verification: `open -b` alone
+silently drops URLs and `open -n` spawns duplicate app instances —
+non-profile targets now use `open -a <path>` (cryptex apps resolve through
+the /Applications stub) plus explicit activation; profile targets keep
+`-n -b --args`. Copied links route like clicked links (rules → fallback);
+the picker is explicit-hotkey only and auto-dismisses on focus loss.
+Automation denials re-fire the real consent prompt. BrowserAccess resolves
+non-scoped bookmarks and accepts readable paths when scope can't start.
+`run-local.sh` embeds Sparkle and dev-signs with a stable identity so TCC
+grants survive rebuilds. Dock reopen rebuilds the main window. GitHub
+feed/tag publication still pending.
+
 ## 2026-09-25 — link router (local, unreleased)
 
 New link-routing feature, tracked in GitHub issue #6 and implemented on top
@@ -37,7 +54,7 @@ BrowserOpener/ProfileDiscovery/FrontmostTab; `LinkRouterService` + panel +
 pass (11 new). Verified live: GURL → Safari fallback and a `routeme.dev`
 rule → Brave both opened correctly. Picker hotkeys, profile-targeted opens,
 and release-sandbox entitlement review remain unverified on-device;
-uncommitted, awaiting owner review.
+superseded by the 0.4.0-5 release entry above.
 
 ## 2026-09-22 — 0.3.1 build 4: guided connect + faster auto-sync
 
