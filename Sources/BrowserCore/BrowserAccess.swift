@@ -171,9 +171,13 @@ public final class BrowserGrantStore: @unchecked Sendable {
             }
             switch resolve(grant) {
             case .success(let resolved):
+                // startAccessing returns false in a non-sandboxed app — there
+                // is no scope to acquire, but the folder is still readable.
+                // Fall back to a readability check so dev builds work.
                 let started = resolved.url.startAccessingSecurityScopedResource()
                 defer { if started { resolved.url.stopAccessingSecurityScopedResource() } }
-                guard started else {
+                guard started || FileManager.default
+                    .isReadableFile(atPath: resolved.url.path) else {
                     return BrowserAccessStatus(kind: kind,
                         state: .needsAccess(message: "Reconnect this browser folder."))
                 }
@@ -200,12 +204,16 @@ public final class BrowserGrantStore: @unchecked Sendable {
         for grant in grants() {
             switch resolve(grant) {
             case .success(let resolved):
-                guard resolved.url.startAccessingSecurityScopedResource() else {
+                let started = resolved.url.startAccessingSecurityScopedResource()
+                // Non-sandboxed builds can't start scope — nothing to
+                // acquire — so accept a readable path instead.
+                guard started || FileManager.default
+                    .isReadableFile(atPath: resolved.url.path) else {
                     failures.append(BrowserGrantFailure(kind: grant.kind,
                         message: "folder access was revoked; reconnect it"))
                     continue
                 }
-                active.append(resolved.url)
+                if started { active.append(resolved.url) }
                 let root = BrowserRoot(kind: grant.kind, url: resolved.url)
                 guard BrowserDiscovery.isValid(root: root) else {
                     failures.append(BrowserGrantFailure(kind: grant.kind,
@@ -226,8 +234,17 @@ public final class BrowserGrantStore: @unchecked Sendable {
     private func resolve(_ grant: BrowserGrant) -> Result<(url: URL, stale: Bool), Error> {
         Result {
             var stale = false
+            if let url = try? URL(resolvingBookmarkData: grant.bookmark,
+                                  options: [.withSecurityScope], relativeTo: nil,
+                                  bookmarkDataIsStale: &stale) {
+                return (url, stale)
+            }
+            // Bookmarks created without security scope (e.g. seeded grants in
+            // non-sandboxed dev builds) throw CocoaError 259 when resolved
+            // with .withSecurityScope — resolve them plainly instead. The
+            // sandbox still gates actual reads for scoped builds.
             let url = try URL(resolvingBookmarkData: grant.bookmark,
-                              options: [.withSecurityScope], relativeTo: nil,
+                              options: [], relativeTo: nil,
                               bookmarkDataIsStale: &stale)
             return (url, stale)
         }

@@ -23,6 +23,12 @@ boundaries:
   disclosing domain names, truncated titles and paths. Never call these anonymous.
 - BrowserDaddy owns browsing intelligence. StorageDaddy owns storage and
   configuration cleanup; PerformanceDaddy owns runtime diagnosis.
+- The link router (Sources/BrowserCore/LinkRouter.swift) opens URLs in other
+  browsers via /usr/bin/open + LaunchServices — never via the default-handler
+  path, which would loop back into BrowserDaddy. Incognito tabs must never be
+  moved or logged; the Chrome/Brave window-mode check is the filter. Router
+  profile discovery reads Local State only inside already-granted browser
+  roots — never the parent dir or implicit home paths.
 - Use XcodeBuildMCP for build, test, run, logging, and native UI verification.
 - Run focused tests before the full package suite.
 - Do not commit, push, sign, package, publish, or release without explicit
