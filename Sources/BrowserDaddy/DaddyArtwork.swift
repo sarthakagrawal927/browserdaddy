@@ -4,11 +4,9 @@ import SwiftUI
 /// BrowserDaddy's own Tab Scout identity; compact mark and full illustration.
 struct DaddyArtwork: View {
     var brand = false
-    private static let mark = Bundle.module.url(
-        forResource: "BrowserDaddyIcon", withExtension: "png")
+    private static let mark = DaddyResources.url(forResource: "BrowserDaddyIcon")
         .flatMap(NSImage.init(contentsOf:))
-    private static let sheet = Bundle.module.url(
-        forResource: "BrowserDaddyScout", withExtension: "png")
+    private static let sheet = DaddyResources.url(forResource: "BrowserDaddyScout")
         .flatMap(NSImage.init(contentsOf:))
     var body: some View {
         GeometryReader { geometry in
@@ -18,5 +16,15 @@ struct DaddyArtwork: View {
                 Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
             }
         }.clipped().allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+enum DaddyResources {
+    static func url(forResource name: String) -> URL? {
+        let packaged = Bundle.main.resourceURL.flatMap {
+            Bundle(url: $0.appendingPathComponent("BrowserDaddy_BrowserDaddy.bundle"))
+        }
+        return packaged?.url(forResource: name, withExtension: "png")
+            ?? Bundle.module.url(forResource: name, withExtension: "png")
     }
 }
