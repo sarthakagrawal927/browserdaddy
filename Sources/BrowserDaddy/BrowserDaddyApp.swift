@@ -1,6 +1,32 @@
 import SwiftUI
 import BrowserCore
 
+/// Installs link-router plumbing (GURL handler + global hotkeys) at launch.
+final class BrowserDaddyAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Task { @MainActor in LinkRouterService.shared.install() }
+    }
+
+    /// The app stays alive windowless — routing/hotkeys are background
+    /// features — but a Dock/⌘-tab click must rebuild the main window.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if flag { return true }
+        guard let open = WindowReopener.shared.openWindow else { return true }
+        open(id: "main")
+        sender.activate()
+        return false
+    }
+}
+
+/// The scene's OpenWindowAction captured for the app delegate — SwiftUI
+/// owns window creation, so reopening has to go through it. All access is
+/// main-thread (delegate + view lifecycle), so the isolation is nominal.
+final class WindowReopener: @unchecked Sendable {
+    static let shared = WindowReopener()
+    var openWindow: OpenWindowAction?
+}
+
 @MainActor
 final class AppStartup: ObservableObject {
     @Published private(set) var model: AppModel?
@@ -57,6 +83,7 @@ private enum PreviewArchive {
 
 private struct BrowserDaddyContent: View {
     @ObservedObject var model: AppModel
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -64,16 +91,19 @@ private struct BrowserDaddyContent: View {
             else { RootView() }
         }
         .environmentObject(model)
+        .onAppear { WindowReopener.shared.openWindow = openWindow }
     }
 }
 
 @main
 struct BrowserDaddyApp: App {
+    @NSApplicationDelegateAdaptor(BrowserDaddyAppDelegate.self)
+        private var appDelegate
     @StateObject private var startup = AppStartup()
     @StateObject private var updates = AppUpdates()
 
     var body: some Scene {
-        WindowGroup("browserdaddy") {
+        WindowGroup("browserdaddy", id: "main") {
             Group {
                 if let model = startup.model {
                     BrowserDaddyContent(model: model)
@@ -144,14 +174,16 @@ struct BrowserDaddyApp: App {
 }
 
 enum Workspace: String, CaseIterable, Identifiable {
-    case attention = "Attention", dashboard = "Dashboard",
-         history = "History", permissions = "Permissions"
+    case attention = "Attention", tabs = "Tabs", dashboard = "Dashboard",
+         history = "History", router = "Router", permissions = "Permissions"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .attention: return "eye"
+        case .tabs: return "rectangle.stack"
         case .dashboard: return "chart.bar.xaxis"
         case .history: return "clock.arrow.circlepath"
+        case .router: return "link.circle"
         case .permissions: return "lock.shield"
         }
     }
@@ -205,10 +237,12 @@ struct RootView: View {
             VStack(alignment: .leading, spacing: 5) {
                 navigationHeading("LIVE")
                 navigationItem(.attention)
+                navigationItem(.tabs)
                 navigationHeading("ARCHIVE").padding(.top, 9)
                 navigationItem(.dashboard)
                 navigationItem(.history)
                 navigationHeading("SETUP").padding(.top, 9)
+                navigationItem(.router)
                 navigationItem(.permissions)
             }
 
@@ -247,8 +281,10 @@ struct RootView: View {
     @ViewBuilder private var content: some View {
         switch workspace {
         case .attention: AttentionView()
+        case .tabs: TabsView()
         case .dashboard: DashboardView()
         case .history: HistoryView()
+        case .router: RouterView()
         case .permissions: PermissionsView()
         }
     }
@@ -264,6 +300,11 @@ struct RootView: View {
                     .frame(maxWidth: 420, alignment: .leading)
             }
             Spacer()
+            if !model.routerStatus.isEmpty {
+                Text(model.routerStatus).lineLimit(1)
+                    .foregroundStyle(model.routerStatus.hasPrefix("✗")
+                                     ? BrowserTheme.coral : BrowserTheme.mintInk)
+            }
             if let r = model.report {
                 Text("\(r.totalVisits.formatted()) visits")
                     .monospacedDigit().foregroundStyle(BrowserTheme.secondaryInk)
@@ -279,8 +320,10 @@ struct RootView: View {
     private var statusText: String {
         switch workspace {
         case .attention: "Real focused time, live"
+        case .tabs: "Every open tab, every browser"
         case .dashboard: "Unified browsing archive"
         case .history: "Every visit, every browser"
+        case .router: "Where links open"
         case .permissions: "Access and grants"
         }
     }

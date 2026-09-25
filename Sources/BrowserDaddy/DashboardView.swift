@@ -712,8 +712,18 @@ struct DashboardView: View {
                     .foregroundStyle(BrowserTheme.secondaryInk)
                     .multilineTextAlignment(.center).frame(maxWidth: 520)
             }
-            Button("Sync History", action: model.runExtract)
+            Button(model.extracting ? "Syncing…" : "Sync History",
+                   action: model.runExtract)
                 .buttonStyle(PrimaryActionButtonStyle())
+                .disabled(model.extracting)
+            if let last = model.extractLog.last {
+                Text(last)
+                    .font(.caption)
+                    .foregroundStyle(last.hasPrefix("✗")
+                                     ? BrowserTheme.coral
+                                     : BrowserTheme.secondaryInk)
+                    .multilineTextAlignment(.center).frame(maxWidth: 520)
+            }
             Spacer()
         }
         .padding(48)

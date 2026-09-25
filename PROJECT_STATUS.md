@@ -1,5 +1,44 @@
 # BrowserDaddy — project status
 
+## 2026-09-25 — link router (local, unreleased)
+
+New link-routing feature, tracked in GitHub issue #6 and implemented on top
+of 0.3.1. BrowserDaddy can now be the macOS default browser: `CFBundleURLTypes`
+declares http/https and a GURL AppleEvent handler routes every clicked link
+silently — first ordered rule wins, else the configured fallback target (never
+the default-handler path, which would loop). Rules match host globs and
+full-URL globs, case-insensitive, and land in a browser+Chromium-profile
+target opened via `/usr/bin/open -na --args --profile-directory=`.
+
+Explicit picks go through a floating picker panel, reached three ways: a
+clipboard watcher (0.4s pasteboard poll, gated on a browser being frontmost)
+auto-opens rule-matched copies and pops the picker otherwise — verified live
+by copying a `routeme.dev` link in Safari straight into Brave with zero
+keystrokes; ⌃⌥O picks for the copied link; ⌃⌥Space reads the frontmost
+browser's active tab (AppleScript; Chrome and Brave incognito windows are
+refused via the verified window-mode check — both sdefs expose `mode`).
+Carbon `RegisterEventHotKey` drives the hotkeys — no accessibility grant
+needed. Router workspace (SETUP → Router) edits
+rules, fallback, and manually declared profile dirs; discovered profiles
+come from `Local State` inside connected grant roots only. Config persists
+in `meta.router.config`.
+
+Same session added the LIVE → Tabs workspace (issue #7): `TabInventory`
+enumerates every open tab per scriptable browser via AppleScript
+(Chrome/Brave incognito filtered by window mode, Safari/Firefox limits
+disclosed), with close/focus verbs, multi-select bulk close, search filter,
+context-menu Send-to, and drag-onto-browser-section moves (open in target,
+close source only on success). Auto-refreshes every 15s while visible.
+
+`BrowserCore/LinkRouter.swift` carries RouterConfig/RouterStore/RuleEngine/
+BrowserOpener/ProfileDiscovery/FrontmostTab; `LinkRouterService` + panel +
+`RouterView` live in the app. `run-local.sh` now embeds Sparkle.framework
+(the dev bundle previously crashed on launch without it). 53 package tests
+pass (11 new). Verified live: GURL → Safari fallback and a `routeme.dev`
+rule → Brave both opened correctly. Picker hotkeys, profile-targeted opens,
+and release-sandbox entitlement review remain unverified on-device;
+uncommitted, awaiting owner review.
+
 ## 2026-09-22 — 0.3.1 build 4: guided connect + faster auto-sync
 
 Onboarding/Permissions now give exact per-browser folder directions and a

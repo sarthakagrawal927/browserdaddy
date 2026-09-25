@@ -14,4 +14,17 @@ cp "$bin_path/BrowserDaddy" "$bundle_path/Contents/MacOS/BrowserDaddy"
 cp Support/Info.plist "$bundle_path/Contents/Info.plist"
 cp Support/BrowserDaddy.icns "$bundle_path/Contents/Resources/BrowserDaddy.icns"
 cp -R "$bin_path/BrowserDaddy_BrowserDaddy.bundle" "$bundle_path/Contents/Resources/" 2>/dev/null || true
+# Sparkle is dynamic — the linker rpath expects it in Contents/Frameworks.
+# Fresh copy each run: cp -R merges into an existing dir and was leaving
+# flattened framework contents alongside it (breaks codesign --deep).
+rm -rf "$bundle_path/Contents/Frameworks"
+mkdir -p "$bundle_path/Contents/Frameworks"
+cp -R "$bin_path/Sparkle.framework" "$bundle_path/Contents/Frameworks/" 2>/dev/null || true
+# TCC (Automation consent etc.) keys grants to the signing identity — an
+# ad-hoc signature gets a new identity every build, silently dropping grants.
+# A stable development signature keeps them across rebuilds.
+identity="$(security find-identity -v -p codesigning | grep -m1 'Apple Development' | sed 's/.*"\(.*\)"/\1/' || true)"
+if [ -n "$identity" ]; then
+    codesign --force --deep --sign "$identity" "$bundle_path" 2>/dev/null || true
+fi
 open -n "$bundle_path" --args "$@"

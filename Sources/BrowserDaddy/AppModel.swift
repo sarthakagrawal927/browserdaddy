@@ -2,6 +2,7 @@ import Foundation
 import BrowserCore
 import ServiceManagement
 import AppKit
+import CoreServices
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -63,11 +64,28 @@ final class AppModel: ObservableObject {
     /// SPOT CHECK: selected domain + its month-over-month verdict.
     @Published var checkHost = "www.youtube.com"
     @Published var siteCheck: ReportEngine.SiteCheck?
+    // link router
+    @Published var routerConfig = RouterConfig()
+    /// Chromium profiles discovered inside connected browser roots.
+    @Published var routerProfiles: [BrowserKind: [ChromiumProfile]] = [:]
+    /// One-line feedback for the status bar (routed, picked, or failed).
+    @Published var routerStatus = ""
+    // tabs inventory
+    struct TabGroup: Identifiable {
+        var id: BrowserKind { kind }
+        let kind: BrowserKind
+        let state: TabSourceState
+    }
+    @Published var tabGroups: [TabGroup] = []
+    @Published var tabsRefreshing = false
+    @Published var tabSearch = ""
+    @Published var tabSelection = Set<String>()
 
     let store: ArchiveStore
     let engine: ReportEngine
     let watcher: FocusWatcher
     let alerts: AlertEngine
+    let routerStore: RouterStore
     @Published var alertConfig = AlertConfig()
     private var didStartCollection = false
     private var lastExtractAt = Date.distantPast
@@ -83,6 +101,7 @@ final class AppModel: ObservableObject {
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
         alerts = AlertEngine(store: store)
+        routerStore = RouterStore(store: store)
         alertConfig = alerts.config()
         alerts.deliver = AlertDelivery.post
         startCollectionOverride = startCollection
@@ -91,6 +110,9 @@ final class AppModel: ObservableObject {
         needsOnboarding = store.metaGet("onboarded") != "1"
         classifyOptin = store.metaGet("classify_optin") == "1"
             && store.metaGet("classify_consent_version") == Self.classificationConsentVersion
+        routerConfig = routerStore.config()
+        LinkRouterService.shared.model = self
+        LinkRouterService.shared.drainPending()
     }
 
     func boot() {
@@ -114,7 +136,7 @@ final class AppModel: ObservableObject {
             }
         }
         watcher.start()
-        Task.detached(priority: .utility) { [store] in
+        Task.detached(priority: .utility) {
             await self.reload()
             await MainActor.run { self.reloadAttention() }
             await MainActor.run { self.loadFocusDay() }
@@ -179,6 +201,308 @@ final class AppModel: ObservableObject {
 
     func refreshBrowserAccess() {
         browserAccess = browserGrantStore.statuses(for: visibleBrowserKinds)
+        refreshRouterProfiles()
+    }
+
+    // MARK: link router
+
+    func setRouterConfig(_ cfg: RouterConfig) {
+        routerConfig = cfg
+        routerStore.save(cfg)
+    }
+
+    /// Chromium profile dirs for a browser — discovered under connected
+    /// roots first, then user-declared, deduplicated in order.
+    func profilesFor(_ kind: BrowserKind) -> [String] {
+        var seen = Set<String>()
+        return ((routerProfiles[kind] ?? []).map(\.directory)
+                + (routerConfig.profiles[kind.rawValue] ?? []))
+            .filter { seen.insert($0).inserted }
+    }
+
+    var installedBrowsers: [BrowserKind] {
+        BrowserKind.allCases.filter { BrowserOpener.appURL(for: $0) != nil }
+    }
+
+    /// One row per known profile for profile-capable browsers (a plain
+    /// browser row only when no profiles are known — it'd just duplicate
+    /// ·Default), one row each for the rest.
+    func routerTargets() -> [LinkTarget] {
+        BrowserKind.allCases
+            .filter { BrowserOpener.appURL(for: $0) != nil }
+            .flatMap { kind -> [LinkTarget] in
+                let profiles = BrowserOpener.supportsProfiles(kind)
+                    ? profilesFor(kind) : []
+                if profiles.isEmpty { return [LinkTarget(browser: kind)] }
+                return profiles.map { LinkTarget(browser: kind, profile: $0) }
+            }
+    }
+
+    /// profile dir → friendly name ("Profile 1" → "vaultwealth.com"), keyed
+    /// by LinkTarget.id — picker rows show these instead of raw dirs.
+    var routerProfileNames: [String: String] {
+        Dictionary(uniqueKeysWithValues: routerProfiles.flatMap { kind, ps in
+            ps.map { ("\(kind.rawValue)|\($0.directory)",
+                      $0.name.isEmpty ? $0.directory : $0.name) }
+        })
+    }
+
+    /// Clicked link while BrowserDaddy is the default browser — silent:
+    /// first matching rule wins, else fallback. Never sends a link back to
+    /// LaunchServices' default (that would be us — a loop).
+    func route(_ url: URL) {
+        let rule = routerConfig.enabled
+            ? RuleEngine.match(url, rules: routerConfig.rules) : nil
+        let target = rule?.target ?? routerConfig.fallback
+        if openTarget(url, target) {
+            routerStatus = rule.map { "→ \(target.label) · \($0.pattern)" }
+                ?? "→ \(target.label)"
+        }
+    }
+
+    @discardableResult
+    private func openTarget(_ url: URL, _ target: LinkTarget) -> Bool {
+        do {
+            try BrowserOpener.open(url, target: target)
+            return true
+        } catch {
+            // Fallback recovery — any installed browser, never ourselves.
+            for kind in BrowserKind.allCases where kind != target.browser {
+                guard BrowserOpener.appURL(for: kind) != nil else { continue }
+                try? BrowserOpener.open(url, target: LinkTarget(browser: kind))
+                let why = (error as? BrowserOpener.Failure)?.isPermissionDenied == true
+                    ? "needs permission — check Privacy & Security "
+                        + "in System Settings"
+                    : error.localizedDescription
+                routerStatus = "→ \(kind.displayName) ("
+                    + "\(target.label) failed: \(why))"
+                return true
+            }
+            routerStatus = "✗ couldn't open link — no browser found"
+            return false
+        }
+    }
+
+    /// ⌃⌥O — clipboard URL through the picker.
+    func openClipboardLink() {
+        guard let url = clipboardURL() else {
+            routerStatus = "no link on the clipboard"
+            return
+        }
+        presentPicker(url)
+    }
+
+    private func clipboardURL() -> URL? {
+        guard let raw = NSPasteboard.general.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            let url = URL(string: raw),
+            let scheme = url.scheme?.lowercased(),
+            scheme == "http" || scheme == "https"
+        else { return nil }
+        return url
+    }
+
+    /// Pasteboard changed (fired by LinkRouterService's poll). Every fresh
+    /// copy of a link reacts — the changeCount gate handles dedupe, so
+    /// re-copying the same URL re-triggers on purpose. Copied links route
+    /// exactly like clicked ones: first rule match wins, else fallback —
+    /// the picker only appears on explicit invocation (hotkeys, buttons).
+    func clipboardPasted() {
+        guard routerConfig.enabled, routerConfig.clipboardWatch,
+              let url = clipboardURL()
+        else { return }
+        let rule = RuleEngine.match(url, rules: routerConfig.rules)
+        if openTarget(url, rule?.target ?? routerConfig.fallback) {
+            routerStatus = rule.map { "→ \(rule!.target.label) · \($0.pattern)" }
+                ?? "→ \(routerConfig.fallback.label)"
+        }
+    }
+
+    // MARK: tabs inventory
+
+    /// Browsers already asked for Automation consent this run — asking again
+    /// would re-fire the system prompt every refresh.
+    private var consentAsked = Set<BrowserKind>()
+
+    func refreshTabs() {
+        guard !tabsRefreshing else { return }
+        tabsRefreshing = true
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let raw = TabInventory.inventory()
+            let groups = raw.map { TabGroup(kind: $0.kind, state: $0.state) }
+            // Ask for consent proactively — fire the system prompt once per
+            // browser per run instead of leaving a dead "needs consent" note.
+            let toAsk = await MainActor.run { () -> [BrowserKind] in
+                guard let self else { return [] }
+                let kinds = groups.compactMap { g -> BrowserKind? in
+                    guard case .needsConsent = g.state,
+                          !self.consentAsked.contains(g.kind)
+                    else { return nil }
+                    return g.kind
+                }
+                self.consentAsked.formUnion(kinds)
+                return kinds
+            }
+            for kind in toAsk { TabInventory.requestConsent(for: kind) }
+            await MainActor.run {
+                self?.tabGroups = groups
+                self?.tabsRefreshing = false
+            }
+        }
+    }
+
+    /// Manual re-ask — the "Allow <browser>" affordance in Tabs.
+    func requestTabConsent(_ kind: BrowserKind) {
+        consentAsked.insert(kind)
+        Task.detached { TabInventory.requestConsent(for: kind) }
+    }
+
+    func closeTab(_ tab: BrowserTab) {
+        runTabOp { TabInventory.close(tab) }
+    }
+
+    func closeTabs(_ tabs: [BrowserTab]) {
+        runTabOp {
+            var last: TabSourceState = .tabs([])
+            for t in tabs { last = TabInventory.close(t) }
+            return last
+        }
+    }
+
+    func focusTab(_ tab: BrowserTab) {
+        runTabOp(refreshAfter: false) { TabInventory.focus(tab) }
+    }
+
+    /// DnD or "Send to" — open the URL in the target, then close the source
+    /// tab only on success (never lose a tab to a failed open).
+    func moveTab(_ tab: BrowserTab, to target: LinkTarget) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let url = URL(string: tab.url) else { return }
+            do {
+                try BrowserOpener.open(url, target: target)
+                _ = TabInventory.close(tab)
+                await MainActor.run {
+                    self?.routerStatus = "→ \(target.label)"
+                }
+            } catch {
+                await MainActor.run {
+                    self?.routerStatus = "✗ couldn't open in \(target.label) — tab kept"
+                }
+            }
+            await MainActor.run { self?.tabsRefreshing = false }
+            await self?.refreshTabs()
+        }
+    }
+
+    /// Default landing spot for drag-moves into a browser: its first
+    /// router target (first known profile, else the browser itself).
+    func firstTarget(for kind: BrowserKind) -> LinkTarget {
+        routerTargets().first { $0.browser == kind } ?? LinkTarget(browser: kind)
+    }
+
+    var allTabs: [BrowserTab] {
+        tabGroups.flatMap { group -> [BrowserTab] in
+            guard case .tabs(let tabs) = group.state else { return [] }
+            return tabs
+        }
+    }
+
+    var filteredTabGroups: [TabGroup] {
+        let q = tabSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return tabGroups }
+        return tabGroups.compactMap { group in
+            guard case .tabs(let tabs) = group.state else { return group }
+            let kept = tabs.filter {
+                $0.title.lowercased().contains(q)
+                    || $0.url.lowercased().contains(q)
+            }
+            return TabGroup(kind: group.kind,
+                            state: kept.isEmpty ? .noWindows : .tabs(kept))
+        }
+    }
+
+    private func runTabOp(refreshAfter: Bool = true,
+                          _ op: @escaping @Sendable () -> TabSourceState) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = op()
+            if case .needsConsent = result {
+                await MainActor.run {
+                    self?.routerStatus = "needs Automation consent — approve it in System Settings"
+                }
+            } else if case .failed(let msg) = result {
+                await MainActor.run { self?.routerStatus = "✗ \(msg)" }
+            }
+            if refreshAfter { await self?.refreshTabs() }
+        }
+    }
+
+    /// ⌃⌥Space — frontmost browser's active tab, moved through the picker.
+    /// Incognito windows return .unavailable where detectable (Chrome/Brave).
+    func moveCurrentTab() {
+        switch FrontmostTab.capture() {
+        case .url(_, let value):
+            guard let url = URL(string: value),
+                  let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else {
+                routerStatus = "no link on this tab"
+                return
+            }
+            presentPicker(url)
+        case .notBrowser(let app):
+            routerStatus = "\(app) isn't a browser"
+        case .needsConsent(let kind):
+            routerStatus = "approve \(kind.displayName) in the "
+                + "Automation prompt…"
+            consentAsked.insert(kind)
+            Task.detached { TabInventory.requestConsent(for: kind) }
+        case .unavailable(let kind):
+            routerStatus = "couldn't read \(kind.displayName)'s tab — "
+                + "private window or nothing open"
+        }
+    }
+
+    private func presentPicker(_ url: URL) {
+        let rule = routerConfig.enabled
+            ? RuleEngine.match(url, rules: routerConfig.rules) : nil
+        LinkRouterService.shared.picker.show(
+            url: url, targets: routerTargets(),
+            profileNames: routerProfileNames,
+            preselect: rule?.target, matchedRule: rule) { [weak self] target in
+            guard let self else { return }
+            if self.openTarget(url, target) {
+                self.routerStatus = "→ \(target.label)"
+            }
+        }
+    }
+
+    private func refreshRouterProfiles() {
+        let grants = browserGrantStore
+        Task.detached(priority: .utility) { [weak self] in
+            var map: [BrowserKind: [ChromiumProfile]] = [:]
+            grants.withAccessibleRoots { roots, _ in
+                for root in roots where BrowserOpener.supportsProfiles(root.kind) {
+                    map[root.kind] = ProfileDiscovery.chromiumProfiles(
+                        userDataRoot: root.url)
+                }
+            }
+            await MainActor.run { self?.routerProfiles = map }
+        }
+    }
+
+    /// Current https handler — "com.significanthobbies.browserdaddy.dev"
+    /// when we're default.
+    var currentDefaultHandlerID: String {
+        guard let probe = URL(string: "https://browserdaddy.invalid"),
+              let appURL = NSWorkspace.shared.urlForApplication(toOpen: probe)
+        else { return "" }
+        return Bundle(url: appURL)?.bundleIdentifier ?? ""
+    }
+
+    func makeDefaultBrowser() {
+        guard let bid = Bundle.main.bundleIdentifier else { return }
+        LSSetDefaultHandlerForURLScheme("http" as CFString, bid as CFString)
+        LSSetDefaultHandlerForURLScheme("https" as CFString, bid as CFString)
+        objectWillChange.send()
     }
 
     func connectBrowser(_ kind: BrowserKind) {
