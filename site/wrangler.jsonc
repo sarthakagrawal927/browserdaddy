@@ -11,7 +11,11 @@
   },
   "routes": [
     {
-      "pattern": "browserdaddy.significanthobbies.com/updates/*",
+      "pattern": "browser.daddyrad.com",
+      "custom_domain": true
+    },
+    {
+      "pattern": "browserdaddy.significanthobbies.com/*",
       "zone_name": "significanthobbies.com"
     }
   ],
