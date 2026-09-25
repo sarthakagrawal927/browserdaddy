@@ -54,6 +54,10 @@ Tracking: https://github.com/sarthakagrawal927/browserdaddy/issues/3
 Build and test with XcodeBuildMCP using this Swift package path. Set session
 configuration to Release and build arm64 + x86_64. Verify both Mach-O minimum
 OS versions and architectures before using `scripts/package-release.py`.
+The protected GitHub release workflow builds verified universal Release products,
+signs and notarizes an exact tagged candidate, signs its appcast with the protected
+Sparkle key, and retains the checked artifact. Publishing to the site remains a
+separate gate.
 The script requires a fresh output directory and an existing Developer ID identity;
 it signs an isolated candidate, never installs or publishes it. Notarization,
 stapling, Gatekeeper checks and native runtime qualification are separate gates.
