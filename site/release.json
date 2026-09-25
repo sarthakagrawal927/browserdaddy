@@ -1,0 +1,10 @@
+{
+  "app": "browserdaddy",
+  "version": "0.3.1",
+  "build": 5,
+  "sourceSha": "3524dca6bd10a3b3037a836135b645a37fc1efd4",
+  "filename": "browserdaddy-0.3.1-build5-universal.dmg",
+  "sha256": "d9ec7ac1fc07e524fbebbe01cd18fb31966c810da9358da13039f0a71ad35f90",
+  "bytes": 7599453,
+  "baseUrl": "https://browser.daddyrad.com/updates/"
+}

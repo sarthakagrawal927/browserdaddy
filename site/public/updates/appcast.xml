@@ -4,11 +4,11 @@
         <title>BrowserDaddy</title>
         <item>
             <title>0.3.1</title>
-            <pubDate>Tue, 22 Sep 2026 19:18:38 +0530</pubDate>
-            <sparkle:version>4</sparkle:version>
+            <pubDate>Fri, 25 Sep 2026 16:43:55 +0000</pubDate>
+            <sparkle:version>5</sparkle:version>
             <sparkle:shortVersionString>0.3.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://browserdaddy.significanthobbies.com/updates/browserdaddy-0.3.1-build4-universal.dmg" length="7629511" type="application/octet-stream" sparkle:edSignature="jDiOLxyjLAj80lxlKitA7Z+LJ95JkcexAH9FdvE53c1Qrq7flLIy/RwwLtJDbB40wUmBc+SKuBcDm9LJwAbBBA=="/>
+            <enclosure url="https://browser.daddyrad.com/updates/browserdaddy-0.3.1-build5-universal.dmg" length="7599453" type="application/octet-stream" sparkle:edSignature="sF21xS1SzsDrA0pJaUCHiRx+3Cwdp45T7ERk0NQu6dxy1rFmvcmsn3GUzDP+Oi5kKlp0I0TZa4mGmxnoxiWVCQ=="/>
         </item>
     </channel>
 </rss>
