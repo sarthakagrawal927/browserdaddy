@@ -3,12 +3,12 @@
     <channel>
         <title>BrowserDaddy</title>
         <item>
-            <title>0.4.3</title>
-            <pubDate>Sat, 26 Sep 2026 11:42:20 +0000</pubDate>
-            <sparkle:version>12</sparkle:version>
-            <sparkle:shortVersionString>0.4.3</sparkle:shortVersionString>
+            <title>0.4.4</title>
+            <pubDate>Sat, 26 Sep 2026 11:55:37 +0000</pubDate>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.4.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://browser.daddyrad.com/updates/browserdaddy-0.4.3-build12-universal.dmg" length="8203668" type="application/octet-stream" sparkle:edSignature="zTWQOaQj61X5hZotdvs3HlvZ3plcxSoj74ajesRBB+rXUkEKV/12LR8UU3cEq8iOvYr85KnWOw6CMD+zh3BHCA=="/>
+            <enclosure url="https://browser.daddyrad.com/updates/browserdaddy-0.4.4-build13-universal.dmg" length="8202923" type="application/octet-stream" sparkle:edSignature="E2QR3ncj8HH7uHSznNO3Yz1l2nYahWbD3j8JYokqWUDtNGuhBlDWfqdRnG127+jSH3GTGG4LcHhzhwtRO6h3Ag=="/>
         </item>
     </channel>
 </rss>
