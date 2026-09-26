@@ -29,10 +29,6 @@ public struct BrowserTab: Equatable, Sendable, Identifiable, Codable,
     }
 }
 
-private func fourCharCode(_ s: String) -> OSType {
-    s.utf8.reduce(0) { ($0 << 8) | OSType($1) }
-}
-
 /// Per-browser inventory state — an honest answer, not a fake empty list.
 public enum TabSourceState: Equatable, Sendable {
     case tabs([BrowserTab])
@@ -59,17 +55,17 @@ public enum TabInventory {
 
     public static func state(for kind: BrowserKind) -> TabSourceState {
         guard let script = listScript(kind: kind) else { return .unsupported }
-        guard !NSRunningApplication.runningApplications(
-            withBundleIdentifier: kind.bundleIdentifier).isEmpty else {
+        guard let runningApp = NSRunningApplication.runningApplications(
+            withBundleIdentifier: kind.bundleIdentifier).first else {
             return .notRunning
         }
-        guard let target = NSAppleEventDescriptor(
-            bundleIdentifier: kind.bundleIdentifier).aeDesc else {
-            return .failed("Couldn’t check Automation access")
+        let address = NSAppleEventDescriptor(
+            processIdentifier: runningApp.processIdentifier)
+        let permission = withExtendedLifetime(address) {
+            AEDeterminePermissionToAutomateTarget(
+                address.aeDesc, AEEventClass(typeWildCard),
+                AEEventID(typeWildCard), false)
         }
-        let permission = AEDeterminePermissionToAutomateTarget(
-            target, AEEventClass(fourCharCode("core")),
-            AEEventID(fourCharCode("getd")), false)
         if permission == errAEEventNotPermitted
             || permission == errAEEventWouldRequireUserConsent {
             return .needsConsent
@@ -96,13 +92,17 @@ public enum TabInventory {
     /// user must flip the toggle in System Settings.
     @discardableResult
     public static func requestConsent(for kind: BrowserKind) -> Bool {
-        guard let desc = NSAppleEventDescriptor(
-            bundleIdentifier: kind.bundleIdentifier).aeDesc
-        else { return false }
-        // 'core'/'getd' — any event to the target suffices to ask.
-        return AEDeterminePermissionToAutomateTarget(
-            desc, AEEventClass(fourCharCode("core")),
-            AEEventID(fourCharCode("getd")), true) == noErr
+        guard let runningApp = NSRunningApplication.runningApplications(
+            withBundleIdentifier: kind.bundleIdentifier).first else { return false }
+        let address = NSAppleEventDescriptor(
+            processIdentifier: runningApp.processIdentifier)
+        // Check the broad grant needed for tab enumeration, not just a
+        // single Apple event that macOS may allow without consent.
+        return withExtendedLifetime(address) {
+            AEDeterminePermissionToAutomateTarget(
+                address.aeDesc, AEEventClass(typeWildCard),
+                AEEventID(typeWildCard), true) == noErr
+        }
     }
 
     public static func close(_ tab: BrowserTab) -> TabSourceState {
