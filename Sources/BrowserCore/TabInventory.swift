@@ -63,6 +63,20 @@ public enum TabInventory {
             withBundleIdentifier: kind.bundleIdentifier).isEmpty else {
             return .notRunning
         }
+        guard let target = NSAppleEventDescriptor(
+            bundleIdentifier: kind.bundleIdentifier).aeDesc else {
+            return .failed("Couldn’t check Automation access")
+        }
+        let permission = AEDeterminePermissionToAutomateTarget(
+            target, AEEventClass(fourCharCode("core")),
+            AEEventID(fourCharCode("getd")), false)
+        if permission == errAEEventNotPermitted
+            || permission == errAEEventWouldRequireUserConsent {
+            return .needsConsent
+        }
+        guard permission == noErr else {
+            return .failed("Automation couldn’t connect to this browser")
+        }
         var err: NSDictionary?
         let raw = NSAppleScript(source: script)?
             .executeAndReturnError(&err).stringValue ?? ""
