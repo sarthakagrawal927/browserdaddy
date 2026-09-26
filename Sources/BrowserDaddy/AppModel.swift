@@ -330,30 +330,12 @@ final class AppModel: ObservableObject {
 
     // MARK: tabs inventory
 
-    /// Browsers already asked for Automation consent this run — asking again
-    /// would re-fire the system prompt every refresh.
-    private var consentAsked = Set<BrowserKind>()
-
     func refreshTabs() {
         guard !tabsRefreshing else { return }
         tabsRefreshing = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let raw = TabInventory.inventory()
             let groups = raw.map { TabGroup(kind: $0.kind, state: $0.state) }
-            // Ask for consent proactively — fire the system prompt once per
-            // browser per run instead of leaving a dead "needs consent" note.
-            let toAsk = await MainActor.run { () -> [BrowserKind] in
-                guard let self else { return [] }
-                let kinds = groups.compactMap { g -> BrowserKind? in
-                    guard case .needsConsent = g.state,
-                          !self.consentAsked.contains(g.kind)
-                    else { return nil }
-                    return g.kind
-                }
-                self.consentAsked.formUnion(kinds)
-                return kinds
-            }
-            for kind in toAsk { TabInventory.requestConsent(for: kind) }
             await MainActor.run {
                 self?.tabGroups = groups
                 self?.tabsRefreshing = false
@@ -363,8 +345,10 @@ final class AppModel: ObservableObject {
 
     /// Manual re-ask — the "Allow <browser>" affordance in Tabs.
     func requestTabConsent(_ kind: BrowserKind) {
-        consentAsked.insert(kind)
-        Task.detached { TabInventory.requestConsent(for: kind) }
+        Task.detached { [weak self] in
+            TabInventory.requestConsent(for: kind)
+            await MainActor.run { self?.refreshTabs() }
+        }
     }
 
     func closeTab(_ tab: BrowserTab) {
@@ -463,7 +447,6 @@ final class AppModel: ObservableObject {
         case .needsConsent(let kind):
             routerStatus = "approve \(kind.displayName) in the "
                 + "Automation prompt…"
-            consentAsked.insert(kind)
             Task.detached { TabInventory.requestConsent(for: kind) }
         case .unavailable(let kind):
             routerStatus = "couldn't read \(kind.displayName)'s tab — "
