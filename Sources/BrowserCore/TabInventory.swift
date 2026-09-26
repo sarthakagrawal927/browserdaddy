@@ -36,6 +36,7 @@ private func fourCharCode(_ s: String) -> OSType {
 /// Per-browser inventory state — an honest answer, not a fake empty list.
 public enum TabSourceState: Equatable, Sendable {
     case tabs([BrowserTab])
+    case notRunning
     case noWindows
     case needsConsent
     case unsupported
@@ -58,6 +59,10 @@ public enum TabInventory {
 
     public static func state(for kind: BrowserKind) -> TabSourceState {
         guard let script = listScript(kind: kind) else { return .unsupported }
+        guard !NSRunningApplication.runningApplications(
+            withBundleIdentifier: kind.bundleIdentifier).isEmpty else {
+            return .notRunning
+        }
         var err: NSDictionary?
         let raw = NSAppleScript(source: script)?
             .executeAndReturnError(&err).stringValue ?? ""
