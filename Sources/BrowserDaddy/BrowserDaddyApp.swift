@@ -56,11 +56,6 @@ private enum PreviewArchive {
                        url: "https://developer.apple.com/documentation/swiftui",
                        title: "SwiftUI documentation"),
         ])),
-        .init(kind: .safari, state: .tabs([
-            BrowserTab(browser: .safari, window: 1, index: 1,
-                       url: "https://news.ycombinator.com/",
-                       title: "Hacker News"),
-        ])),
     ]
 
     static func make() throws -> ArchiveStore {
@@ -345,7 +340,7 @@ struct RootView: View {
     private var statusText: String {
         switch workspace {
         case .attention: "Real focused time, live"
-        case .tabs: "Every open tab, every browser"
+        case .tabs: "Open Chrome tabs"
         case .dashboard: "Unified browsing archive"
         case .history: "Every visit, every browser"
         case .router: "Where links open"

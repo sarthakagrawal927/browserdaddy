@@ -1,20 +1,19 @@
 # browserdaddy
 
 Native, local-first macOS browsing-intelligence app — unified cross-browser
-history archive + real attention tracking + link routing + cross-browser
-tab management.
+history archive + real attention tracking + link routing + Chrome tab
+inventory and moves to other browsers.
 
 ## Tabs
 
-The LIVE → Tabs workspace lists every open tab across installed scriptable
-browsers, grouped by browser. Click selects (⌘-click for several),
-double-click focuses the real tab, × closes it, right-click offers Send to
-another browser/profile or Copy URL — and dragging a row onto another
-browser's section header moves it there (opens, then closes the source only
-on success). Search filters title+URL; the list refreshes every 15s while
-visible. First enumeration of each browser asks macOS for Automation
-consent. Chrome/Brave incognito windows are excluded via window mode; other
-browsers can't qualify mode. Firefox isn't scriptable at all.
+The LIVE → Tabs workspace lists open Chrome tabs. The signed sandbox allows
+Apple events to Chrome only. Click selects (⌘-click for several),
+double-click focuses the real tab, × closes it, and right-click offers Send
+to another browser/profile or Copy URL. A move opens the destination before
+closing the Chrome tab. Search filters title+URL; the list refreshes every 15s while
+visible. First enumeration asks macOS for Chrome Automation consent. Chrome
+incognito windows are excluded via window mode. The browser picker can still
+open links in Safari and Brave; their tabs are not listed here.
 
 ## Link router
 

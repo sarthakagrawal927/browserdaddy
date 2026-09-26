@@ -60,19 +60,14 @@ struct TabsView: View {
     private var tabSummary: String {
         let total = model.allTabs.count
         guard !model.tabSearch.trimmingCharacters(in: .whitespaces).isEmpty else {
-            let browserCount = model.tabGroups.filter {
-                if case .tabs = $0.state { return true }
-                return false
-            }.count
-            if browserCount == 0 { return "No open tabs" }
-            return "\(total.formatted()) across \(browserCount) "
-                + (browserCount == 1 ? "browser" : "browsers")
+            return "\(total.formatted()) Chrome "
+                + (total == 1 ? "tab" : "tabs")
         }
         let visible = model.filteredTabGroups.reduce(0) { count, group in
             guard case .tabs(let tabs) = group.state else { return count }
             return count + tabs.count
         }
-        return "\(visible.formatted()) of \(total.formatted()) tabs shown"
+        return "\(visible.formatted()) of \(total.formatted()) Chrome tabs shown"
     }
 
     private var toolbarControls: some View {
@@ -115,9 +110,9 @@ struct TabsView: View {
             if model.tabsRefreshing {
                 ProgressView("Reading open tabs…")
             } else {
-                ContentUnavailableView("No supported browsers found",
+                ContentUnavailableView("Chrome is not available",
                                        systemImage: "macwindow.on.rectangle",
-                                       description: Text("Open Safari, Chrome, or Brave to see their tabs."))
+                                       description: Text("Install Chrome to see its open tabs."))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
