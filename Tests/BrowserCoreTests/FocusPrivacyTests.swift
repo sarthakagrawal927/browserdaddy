@@ -2,6 +2,31 @@ import XCTest
 @testable import BrowserCore
 
 final class FocusPrivacyTests: XCTestCase {
+    func testStoppingAttentionClosesSegmentBeforeResuming() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("BrowserDaddy-pause-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try ArchiveStore(url: directory.appendingPathComponent("fixture.db"))
+        let watcher = FocusWatcher(store: store)
+        watcher.start()
+        for _ in 0..<2 {
+            watcher.recordCapture(app: "Chrome", url: "https://fixture.example/",
+                                  title: "Public", dt: 2, active: true)
+        }
+        watcher.stop()
+        watcher.start()
+        for _ in 0..<2 {
+            watcher.recordCapture(app: "Chrome", url: "https://fixture.example/",
+                                  title: "Public", dt: 2, active: true)
+        }
+        watcher.stop()
+        let rows = try store.db.query("SELECT url, ticks, active_s FROM focus ORDER BY id")
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(rows.map { $0["ticks"]?.int }, [1, 1])
+        XCTAssertEqual(rows.map { $0["active_s"]?.double }, [2, 2])
+    }
+
     func testUnavailableTabClosesPreviousURLWithoutAttributingMoreTime() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("BrowserDaddy-focus-test-\(UUID().uuidString)")

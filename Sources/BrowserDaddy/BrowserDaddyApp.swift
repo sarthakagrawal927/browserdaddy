@@ -79,7 +79,14 @@ struct BrowserDaddyApp: App {
             Group {
                 if let model = startup.model {
                     BrowserDaddyContent(model: model)
-                    .onAppear { model.boot() }
+                    .onAppear {
+                        model.boot()
+                        appDelegate.activeWork = {
+                            if model.extracting { return "History sync is still running." }
+                            if model.classifying { return "Classification is still running." }
+                            return nil
+                        }
+                    }
                     .task { updates.start(model: model) }
                 } else {
                     ContentUnavailableView {
@@ -118,7 +125,7 @@ struct BrowserDaddyApp: App {
         }
 
         MenuBarExtra {
-            BrowserMenu(model: startup.model)
+            BrowserMenu(model: startup.model, updates: updates)
         } label: {
             Label("BrowserDaddy", systemImage: "globe")
         }
@@ -153,19 +160,25 @@ struct BrowserDaddyApp: App {
 
 @MainActor
 final class BrowserDaddyDelegate: NSObject, NSApplicationDelegate {
+    var activeWork: (() -> String?)?
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        DaddyQuitReview.shouldQuit(appName: "BrowserDaddy", activeWork: activeWork?()) ? .terminateNow : .terminateCancel
+    }
 }
 
 private struct BrowserMenu: View {
     let model: AppModel?
+    @ObservedObject var updates: AppUpdates
 
     var body: some View {
         if let model {
-            BrowserActiveMenu(model: model)
+            BrowserActiveMenu(model: model, updates: updates)
         } else {
-            Text("Archive unavailable")
+            DaddyMenuStatus(message: "Archive unavailable")
             Divider()
             DaddyMenuOpenButton(appName: "BrowserDaddy")
+            SettingsLink()
             Divider()
             DaddyMenuQuitButton(appName: "BrowserDaddy")
         }
@@ -174,17 +187,36 @@ private struct BrowserMenu: View {
 
 private struct BrowserActiveMenu: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var updates: AppUpdates
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Text(model.needsOnboarding ? "Setup needed before collection" :
+        DaddyMenuStatus(message: model.needsOnboarding ? "Setup needed before collection" :
             model.extracting ? "Syncing local history…" :
+            model.attentionPaused ? "Attention tracking paused; history sync continues" :
             model.watcher.isRunning ? "Collecting local attention" : "Collection is not running")
+        if model.lastSyncNeedsAttention {
+            Text("Last history sync needs attention")
+        } else if let lastSync = model.lastSuccessfulSyncAt {
+            Text("Last history sync: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+        }
         Divider()
         DaddyMenuOpenButton(appName: "BrowserDaddy")
         if !model.needsOnboarding {
             Button("Sync History") { model.runExtract() }
                 .disabled(model.extracting)
+            Button(model.attentionPaused ? "Resume Attention Tracking" : "Pause Attention Tracking") {
+                model.setAttentionPaused(!model.attentionPaused)
+            }
+        } else {
+            Button("Review Setup…") {
+                openWindow(id: "main")
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
         }
+        SettingsLink()
+        Button("Check for Updates…") { updates.check() }
+            .disabled(!updates.canCheck || !updates.isIdle)
         Divider()
         DaddyMenuQuitButton(appName: "BrowserDaddy")
     }

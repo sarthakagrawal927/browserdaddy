@@ -7,6 +7,8 @@ import AppKit
 final class AppModel: ObservableObject {
     @Published var report: ReportEngine.Report?
     @Published var extracting = false
+    @Published private(set) var lastSuccessfulSyncAt: Date?
+    @Published private(set) var lastSyncNeedsAttention = false
     @Published var extractLog: [String] = []
     @Published var automation: [String: Permissions.AutomationState] = [:]
     @Published var browserAccess: [BrowserAccessStatus] = []
@@ -39,6 +41,7 @@ final class AppModel: ObservableObject {
         didSet { Task { await search() } }
     }
     @Published var launchAtLogin = false
+    @Published private(set) var attentionPaused = false
     @Published var showAbout = false
     // attention surface
     @Published var nowApp = ""
@@ -88,6 +91,7 @@ final class AppModel: ObservableObject {
         startCollectionOverride = startCollection
         self.browserGrantStore = browserGrantStore
         launchAtLogin = SMAppService.mainApp.status == .enabled
+        attentionPaused = store.metaGet("attention_paused") == "1"
         needsOnboarding = store.metaGet("onboarded") != "1"
         classifyOptin = store.metaGet("classify_optin") == "1"
             && store.metaGet("classify_consent_version") == Self.classificationConsentVersion
@@ -103,6 +107,7 @@ final class AppModel: ObservableObject {
         refreshPermissions()
         watcher.onTick = { [weak self] app, url in
             Task { @MainActor in
+                guard self?.attentionPaused == false else { return }
                 self?.nowApp = app
                 self?.nowURL = url
             }
@@ -113,8 +118,8 @@ final class AppModel: ObservableObject {
                 self?.loadFocusDay()
             }
         }
-        watcher.start()
-        Task.detached(priority: .utility) { [store] in
+        if !attentionPaused { watcher.start() }
+        Task.detached(priority: .utility) {
             await self.reload()
             await MainActor.run { self.reloadAttention() }
             await MainActor.run { self.loadFocusDay() }
@@ -135,8 +140,26 @@ final class AppModel: ObservableObject {
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) {
             [weak self] _ in
             guard let self else { return }
-            Task.detached(priority: .utility) { self.alerts.evaluate() }
+            Task { @MainActor in
+                guard !self.attentionPaused else { return }
+                Task.detached(priority: .utility) { self.alerts.evaluate() }
+            }
         }
+    }
+
+    func setAttentionPaused(_ paused: Bool) {
+        guard paused != attentionPaused else { return }
+        attentionPaused = paused
+        store.metaSet("attention_paused", paused ? "1" : "0")
+        if paused {
+            watcher.stop()
+            nowApp = ""
+            nowURL = ""
+        } else if didStartCollection {
+            watcher.start()
+        }
+        reloadAttention()
+        loadFocusDay()
     }
 
     /// Persist alert thresholds; enabling asks macOS for notification consent.
@@ -433,7 +456,7 @@ final class AppModel: ObservableObject {
         let store = self.store
         let grants = browserGrantStore
         Task.detached(priority: .utility) {
-            let results = grants.withAccessibleRoots { roots, failures in
+            let (results, hasConnectedRoots, hasGrantFailures) = grants.withAccessibleRoots { roots, failures in
                 for failure in failures {
                     Task { @MainActor in
                         self.extractLog.append("✗ \(failure.kind.displayName): \(failure.message)")
@@ -444,9 +467,10 @@ final class AppModel: ObservableObject {
                         self.extractLog.append("No browser folders connected. Open Permissions to add one.")
                     }
                 }
-                return HistoryExtractor.run(into: store, roots: roots) { line in
+                let results = HistoryExtractor.run(into: store, roots: roots) { line in
                     Task { @MainActor in self.extractLog.append(line) }
                 }
+                return (results, !roots.isEmpty, !failures.isEmpty)
             }
             for r in results {
                 if let err = r.error {
@@ -456,7 +480,11 @@ final class AppModel: ObservableObject {
                     }
                 }
             }
-            await MainActor.run { self.extracting = false }
+            await MainActor.run {
+                self.extracting = false
+                self.lastSyncNeedsAttention = !hasConnectedRoots || hasGrantFailures || results.contains { $0.error != nil }
+                if !self.lastSyncNeedsAttention { self.lastSuccessfulSyncAt = Date() }
+            }
             await MainActor.run { self.refreshBrowserAccess() }
             await self.reload()
         }

@@ -47,25 +47,30 @@ public final class FocusWatcher: @unchecked Sendable {
     public init(store: ArchiveStore) { self.store = store }
 
     public func start() {
-        guard timer == nil else { return }
-        activity = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiatedAllowingIdleSystemSleep],
-            reason: "Measuring frontmost app focus")
-        let t = DispatchSource.makeTimerSource(queue: queue)
-        t.schedule(deadline: .now(), repeating: Self.interval)
-        t.setEventHandler { [weak self] in self?.poll() }
-        t.resume()
-        timer = t
-        isRunning = true
+        queue.sync {
+            guard timer == nil else { return }
+            lastPoll = Date()
+            activity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiatedAllowingIdleSystemSleep],
+                reason: "Measuring frontmost app focus")
+            let t = DispatchSource.makeTimerSource(queue: queue)
+            t.schedule(deadline: .now() + Self.interval, repeating: Self.interval)
+            t.setEventHandler { [weak self] in self?.poll() }
+            t.resume()
+            timer = t
+            isRunning = true
+        }
     }
 
     public func stop() {
-        timer?.cancel()
-        timer = nil
-        if let activity { ProcessInfo.processInfo.endActivity(activity) }
-        activity = nil
-        isRunning = false
-        closeSegment()
+        queue.sync {
+            timer?.cancel()
+            timer = nil
+            if let activity { ProcessInfo.processInfo.endActivity(activity) }
+            activity = nil
+            isRunning = false
+            closeSegment()
+        }
     }
 
     private func poll() {

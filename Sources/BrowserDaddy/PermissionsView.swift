@@ -102,7 +102,14 @@ struct PermissionsView: View {
         BrowserBand(label: "COLLECTION",
                     subtitle: "What runs while the app is alive") {
             VStack(alignment: .leading, spacing: 13) {
-                Text("Closing the window keeps local attention collection and periodic history sync running. Quit BrowserDaddy to stop them.")
+                Text("Closing the window keeps attention tracking and periodic history sync running. You can pause attention tracking below; history sync continues. Quit BrowserDaddy to stop both.")
+                    .font(.caption)
+                    .foregroundStyle(BrowserTheme.secondaryInk)
+                Toggle("Pause attention tracking", isOn: Binding(
+                    get: { model.attentionPaused },
+                    set: { model.setAttentionPaused($0) }))
+                    .tint(BrowserTheme.mintInk)
+                Text("Paused time is left as a gap in the attention timeline.")
                     .font(.caption)
                     .foregroundStyle(BrowserTheme.secondaryInk)
                 Toggle("Launch at login", isOn: Binding(
