@@ -80,6 +80,7 @@ final class AppModel: ObservableObject {
     @Published var tabsRefreshing = false
     @Published var tabSearch = ""
     @Published var tabSelection = Set<String>()
+    let isPreviewFixture: Bool
 
     let store: ArchiveStore
     let engine: ReportEngine
@@ -96,7 +97,9 @@ final class AppModel: ObservableObject {
 
     init(store suppliedStore: ArchiveStore,
          startCollection: (() -> Void)? = nil,
+         previewFixture: Bool = false,
          browserGrantStore: BrowserGrantStore = BrowserGrantStore()) {
+        isPreviewFixture = previewFixture
         store = suppliedStore
         engine = ReportEngine(store: store)
         watcher = FocusWatcher(store: store)
@@ -250,14 +253,17 @@ final class AppModel: ObservableObject {
     /// Clicked link while BrowserDaddy is the default browser — silent:
     /// first matching rule wins, else fallback. Never sends a link back to
     /// LaunchServices' default (that would be us — a loop).
-    func route(_ url: URL) {
+    @discardableResult
+    func route(_ url: URL) -> Bool {
         let rule = routerConfig.enabled
             ? RuleEngine.match(url, rules: routerConfig.rules) : nil
         let target = rule?.target ?? routerConfig.fallback
         if openTarget(url, target) {
             routerStatus = rule.map { "→ \(target.label) · \($0.pattern)" }
                 ?? "→ \(target.label)"
+            return true
         }
+        return false
     }
 
     @discardableResult
@@ -269,7 +275,11 @@ final class AppModel: ObservableObject {
             // Fallback recovery — any installed browser, never ourselves.
             for kind in BrowserKind.allCases where kind != target.browser {
                 guard BrowserOpener.appURL(for: kind) != nil else { continue }
-                try? BrowserOpener.open(url, target: LinkTarget(browser: kind))
+                do {
+                    try BrowserOpener.open(url, target: LinkTarget(browser: kind))
+                } catch {
+                    continue
+                }
                 let why = (error as? BrowserOpener.Failure)?.isPermissionDenied == true
                     ? "needs permission — check Privacy & Security "
                         + "in System Settings"
@@ -416,8 +426,8 @@ final class AppModel: ObservableObject {
                 $0.title.lowercased().contains(q)
                     || $0.url.lowercased().contains(q)
             }
-            return TabGroup(kind: group.kind,
-                            state: kept.isEmpty ? .noWindows : .tabs(kept))
+            guard !kept.isEmpty else { return nil }
+            return TabGroup(kind: group.kind, state: .tabs(kept))
         }
     }
 

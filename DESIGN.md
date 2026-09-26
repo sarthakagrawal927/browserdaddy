@@ -18,6 +18,10 @@ focus, error, disabled and tooltip behavior remain unchanged. Branding is a
 precise accent, not a reason to crowd operational tables or add idle animation.
 Large art must not be reduced to the compact logo's job.
 
+On 2026-09-26 the owner reaffirmed the current native direction. Polish the
+Mac utility's controls and states within this system; the three dashboard-style
+replacement concepts were rejected.
+
 ## Landing
 
 Preserve ios-landings' approved Editorial split layout, responsive image sizing,

@@ -17,6 +17,12 @@ final class LinkRouterService: NSObject {
     let picker = LinkPickerPanelController()
     private var pendingURL: URL?
     private var installed = false
+    private var lastSuccessfulRouteAt: Date?
+
+    var justRoutedLink: Bool {
+        guard let lastSuccessfulRouteAt else { return false }
+        return Date().timeIntervalSince(lastSuccessfulRouteAt) < 1
+    }
 
     // ⌃⌥O — clipboard link picker; ⌃⌥Space — move current tab.
     static let clipboardKey = (code: UInt32(kVK_ANSI_O), name: "⌃⌥O")
@@ -68,7 +74,7 @@ final class LinkRouterService: NSObject {
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
         if let model {
-            model.route(url)
+            if model.route(url) { hideAfterRouting() }
         } else {
             pendingURL = url
         }
@@ -79,7 +85,14 @@ final class LinkRouterService: NSObject {
     func drainPending() {
         guard let url = pendingURL, let model else { return }
         pendingURL = nil
-        model.route(url)
+        if model.route(url) { hideAfterRouting() }
+    }
+
+    private func hideAfterRouting() {
+        lastSuccessfulRouteAt = Date()
+        NSApplication.shared.hide(nil)
+        // A cold launch can create its SwiftUI window after the URL event.
+        DispatchQueue.main.async { NSApplication.shared.hide(nil) }
     }
 }
 

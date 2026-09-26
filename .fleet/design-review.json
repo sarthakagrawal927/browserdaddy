@@ -101,5 +101,14 @@
   "ownerFeedback": {
     "decision": "delegated",
     "note": "Owner said any if fine after three directions. Selected A — Tab Scout for family continuity and browser-specific meaning; preserve established dark UI and Editorial landing. The later scoped-folder permission work remains within that approved system."
+  },
+  "tabsRouterPolishReview": {
+    "date": "2026-09-26",
+    "mode": "preserve",
+    "ownerDirection": "Keep the current Mac utility design and polish its components; reject dashboard-style replacements.",
+    "before": "Installed BrowserDaddy 0.4.0-5 showed a repeated AppleScript parse error in Tabs, cryptic window/tab indices, and empty striped list rows. Clicking links could surface the app window.",
+    "after": "Isolated unsigned fixture build visually inspected through native UI: open-tab rows, grouping, search, no-results state, and clear-search action. Search state kept its header aligned; plain list removed empty striped rows.",
+    "checks": "swift test --filter TabInventoryTests: 1 passed; swift test --filter LinkRouterTests: 11 passed; Swift package app build passed.",
+    "limits": "The installed app was left untouched. Real Automation permission and clicked-link background behavior require a signed app build for device verification."
   }
 }

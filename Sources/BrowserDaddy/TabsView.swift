@@ -15,20 +15,75 @@ struct TabsView: View {
             toolbar
             if model.tabGroups.isEmpty {
                 emptyState
+            } else if model.filteredTabGroups.isEmpty {
+                ContentUnavailableView("No matching tabs",
+                                       systemImage: "magnifyingglass",
+                                       description: Text("Try another title or site."))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 tabList
             }
         }
         .background(BrowserTheme.fog)
-        .onAppear { model.refreshTabs() }
-        .onReceive(refreshTimer) { _ in model.refreshTabs() }
+        .onAppear { if !model.isPreviewFixture { model.refreshTabs() } }
+        .onReceive(refreshTimer) { _ in
+            if !model.isPreviewFixture { model.refreshTabs() }
+        }
     }
 
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            TextField("Filter tabs…", text: $model.tabSearch)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                toolbarTitle
+                Spacer(minLength: 16)
+                toolbarControls
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                toolbarTitle
+                toolbarControls
+            }
+        }
+        .padding(.horizontal, 20).padding(.vertical, 16)
+    }
+
+    private var toolbarTitle: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Open tabs")
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(BrowserTheme.ink)
+            Text(tabSummary)
+                .font(.caption)
+                .foregroundStyle(BrowserTheme.secondaryInk)
+        }
+    }
+
+    private var tabSummary: String {
+        let total = model.allTabs.count
+        guard !model.tabSearch.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return "\(total.formatted()) across \(model.tabGroups.count) browsers"
+        }
+        let visible = model.filteredTabGroups.reduce(0) { count, group in
+            guard case .tabs(let tabs) = group.state else { return count }
+            return count + tabs.count
+        }
+        return "\(visible.formatted()) of \(total.formatted()) tabs shown"
+    }
+
+    private var toolbarControls: some View {
+        HStack(spacing: 10) {
+            TextField("Search title or site", text: $model.tabSearch)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 260)
+                .frame(minWidth: 160, maxWidth: 240)
+                .accessibilityLabel("Search open tabs")
+            if !model.tabSearch.isEmpty {
+                Button { model.tabSearch = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(BrowserTheme.secondaryInk)
+                .help("Clear search")
+                .accessibilityLabel("Clear tab search")
+            }
             if !model.tabSelection.isEmpty {
                 Button("Focus") { focusSelected() }
                 Button("Close \(model.tabSelection.count) tabs") {
@@ -38,23 +93,25 @@ struct TabsView: View {
                 }
                 .buttonStyle(DaddyButtonStyle(prominent: true))
             }
-            Spacer()
             if model.tabsRefreshing {
                 ProgressView().controlSize(.small)
+                    .accessibilityLabel("Refreshing tabs")
             }
-            Button("Refresh") { model.refreshTabs() }
+            Button { model.refreshTabs() } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(model.tabsRefreshing || model.isPreviewFixture)
         }
-        .padding(.horizontal, 20).padding(.vertical, 12)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
+        Group {
             if model.tabsRefreshing {
-                ProgressView()
-                Text("Reading open tabs…")
+                ProgressView("Reading open tabs…")
             } else {
-                Text("No scriptable browsers found")
-                    .foregroundStyle(BrowserTheme.secondaryInk)
+                ContentUnavailableView("No supported browsers found",
+                                       systemImage: "macwindow.on.rectangle",
+                                       description: Text("Open Safari, Chrome, or Brave to see their tabs."))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,7 +151,20 @@ struct TabsView: View {
                     case .unsupported:
                         stateNote("not scriptable — tabs can't be listed")
                     case .failed(let msg):
-                        stateNote("couldn't read tabs — \(msg)")
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundStyle(BrowserTheme.amber)
+                            Text("Couldn’t read tabs")
+                                .foregroundStyle(BrowserTheme.ink)
+                            Text(msg).lineLimit(1)
+                                .foregroundStyle(BrowserTheme.secondaryInk)
+                                .help(msg)
+                            Spacer()
+                            Button("Retry") { model.refreshTabs() }
+                                .disabled(model.tabsRefreshing)
+                        }
+                        .font(.caption)
+                        .padding(.vertical, 6)
                     }
                 } header: {
                     HStack(spacing: 8) {
@@ -107,11 +177,9 @@ struct TabsView: View {
                                 .foregroundStyle(BrowserTheme.mintInk)
                         }
                         Spacer()
-                        Text("drop tabs here to move")
-                            .font(.caption2)
-                            .foregroundStyle(BrowserTheme.secondaryInk.opacity(0.5))
                     }
                     .padding(.vertical, 4)
+                    .help("Drop a tab here to move it to \(group.kind.displayName)")
                     .dropDestination(for: BrowserTab.self) { items, _ in
                         guard let tab = items.first,
                               tab.browser != group.kind else { return false }
@@ -121,7 +189,7 @@ struct TabsView: View {
                 }
             }
         }
-        .listStyle(.inset(alternatesRowBackgrounds: true))
+        .listStyle(.inset)
         .scrollContentBackground(.hidden)
     }
 
@@ -138,16 +206,17 @@ struct TabsView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Text("w\(tab.window)·t\(tab.index)")
+            Text("Window \(tab.window)")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(BrowserTheme.secondaryInk.opacity(0.6))
             Button { model.closeTab(tab) } label: {
-                Image(systemName: "xmark")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(BrowserTheme.coral)
+                Image(systemName: "xmark.circle")
+                    .font(.callout)
+                    .foregroundStyle(BrowserTheme.secondaryInk)
             }
             .buttonStyle(.plain)
             .help("Close tab")
+            .accessibilityLabel("Close \(tab.title.isEmpty ? tab.host : tab.title)")
         }
         .padding(.vertical, 2)
         .draggable(tab)
