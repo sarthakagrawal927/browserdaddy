@@ -60,7 +60,13 @@ struct TabsView: View {
     private var tabSummary: String {
         let total = model.allTabs.count
         guard !model.tabSearch.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "\(total.formatted()) across \(model.tabGroups.count) browsers"
+            let browserCount = model.tabGroups.filter {
+                if case .tabs = $0.state { return true }
+                return false
+            }.count
+            if browserCount == 0 { return "No open tabs" }
+            return "\(total.formatted()) across \(browserCount) "
+                + (browserCount == 1 ? "browser" : "browsers")
         }
         let visible = model.filteredTabGroups.reduce(0) { count, group in
             guard case .tabs(let tabs) = group.state else { return count }
@@ -127,6 +133,8 @@ struct TabsView: View {
                         ForEach(tabs) { tab in
                             tabRow(tab)
                         }
+                    case .notRunning:
+                        stateNote("browser is closed")
                     case .noWindows:
                         stateNote("no open windows")
                     case .needsConsent:

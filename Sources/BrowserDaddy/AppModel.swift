@@ -421,7 +421,7 @@ final class AppModel: ObservableObject {
         let q = tabSearch.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return tabGroups }
         return tabGroups.compactMap { group in
-            guard case .tabs(let tabs) = group.state else { return group }
+            guard case .tabs(let tabs) = group.state else { return nil }
             let kept = tabs.filter {
                 $0.title.lowercased().contains(q)
                     || $0.url.lowercased().contains(q)
