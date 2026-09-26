@@ -59,6 +59,27 @@ def main():
     (contents / "Info.plist").write_bytes(plistlib.dumps(info))
     sparkle_support.embed(app)
     sparkle_support.sign(app, args.identity)
+    extension_project = ROOT / "SafariTabsExtension/SafariTabsExtension.xcodeproj"
+    extension_products = output / "safari-extension-build"
+    run("xcodebuild", "-project", extension_project,
+        "-target", "SafariTabsExtension", "-configuration", "Release",
+        f"SYMROOT={extension_products}", "ARCHS=arm64 x86_64",
+        "ONLY_ACTIVE_ARCH=NO", "CODE_SIGNING_ALLOWED=NO", "build", "-quiet")
+    built_extension = extension_products / "Release/SafariTabsExtension.appex"
+    if not built_extension.is_dir():
+        raise SystemExit("Safari Tabs extension build is missing")
+    plugins = contents / "PlugIns"
+    plugins.mkdir()
+    extension = plugins / built_extension.name
+    shutil.copytree(built_extension, extension)
+    extension_info_path = extension / "Contents/Info.plist"
+    extension_info = plistlib.loads(extension_info_path.read_bytes())
+    extension_info.update(CFBundleShortVersionString=args.version,
+                          CFBundleVersion=str(args.build))
+    extension_info_path.write_bytes(plistlib.dumps(extension_info))
+    run("codesign", "--force", "--sign", args.identity, "--timestamp",
+        "--options", "runtime", "--entitlements",
+        ROOT / "SafariTabsExtension/Entitlements.plist", extension)
     run("codesign", "--force", "--sign", args.identity, "--timestamp", "--options", "runtime",
         "--entitlements", ROOT / "Support/Release.entitlements", app)
     run("codesign", "--verify", "--deep", "--strict", app)

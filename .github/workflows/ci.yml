@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: swift test
+      - run: xcodebuild -project SafariTabsExtension/SafariTabsExtension.xcodeproj -target SafariTabsExtension -configuration Release CODE_SIGNING_ALLOWED=NO build -quiet
       - run: swift build -c release
       - run: python3 -m unittest test_sparkle_support
         working-directory: scripts

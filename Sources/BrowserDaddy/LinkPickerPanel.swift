@@ -33,6 +33,7 @@ final class LinkPickerPanelController {
     private var keyMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var onPick: ((LinkTarget) -> Void)?
+    private var previousApp: NSRunningApplication?
     private let state = LinkPickerState()
 
     func show(url: URL, targets: [LinkTarget],
@@ -40,12 +41,16 @@ final class LinkPickerPanelController {
               matchedRule: RouteRule?,
               onPick: @escaping (LinkTarget) -> Void) {
         guard !targets.isEmpty else { return }
+        dismiss()
         state.url = url.absoluteString
         state.targets = targets
         state.profileNames = profileNames
         state.matchedRule = matchedRule
         state.selection = preselect.flatMap { t in targets.firstIndex(of: t) } ?? 0
         self.onPick = onPick
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        previousApp = frontmost?.bundleIdentifier == Bundle.main.bundleIdentifier
+            ? nil : frontmost
 
         let height = CGFloat(64 + targets.count * 36 + 16)
         let frame = NSRect(x: 0, y: 0, width: 400, height: height)
@@ -60,7 +65,19 @@ final class LinkPickerPanelController {
         panel.isOpaque = false
         panel.contentView = NSHostingView(rootView: LinkPickerView(
             state: state, onConfirm: { [weak self] in self?.confirmSelection() }))
-        panel.center()
+        let pointer = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(pointer) }
+            ?? NSScreen.main
+        if let bounds = screen?.visibleFrame {
+            let x = min(max(pointer.x - frame.width / 2, bounds.minX),
+                        bounds.maxX - frame.width)
+            let y = min(max(pointer.y - frame.height - 12, bounds.minY),
+                        bounds.maxY - frame.height)
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        } else {
+            panel.center()
+        }
+        NSApp.unhideWithoutActivation()
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate()
         self.panel = panel
@@ -79,7 +96,9 @@ final class LinkPickerPanelController {
         }
     }
 
-    func dismiss() {
+    func dismiss(restoreFocus: Bool = false) {
+        let appToRestore = restoreFocus ? previousApp : nil
+        previousApp = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
         if let resignObserver {
@@ -89,6 +108,7 @@ final class LinkPickerPanelController {
         onPick = nil
         panel?.orderOut(nil)
         panel = nil
+        appToRestore?.activate()
     }
 
     func confirmSelection() {
@@ -102,7 +122,7 @@ final class LinkPickerPanelController {
     private func handleKey(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 53:  // esc
-            dismiss()
+            dismiss(restoreFocus: true)
             return true
         case 36, 76:  // return / numpad enter
             confirmSelection()

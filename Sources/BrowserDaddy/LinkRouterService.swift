@@ -90,9 +90,14 @@ final class LinkRouterService: NSObject {
 
     private func hideAfterRouting() {
         lastSuccessfulRouteAt = Date()
+        NSApplication.shared.windows.forEach { $0.orderOut(nil) }
         NSApplication.shared.hide(nil)
+        NSApplication.shared.setActivationPolicy(.accessory)
         // A cold launch can create its SwiftUI window after the URL event.
-        DispatchQueue.main.async { NSApplication.shared.hide(nil) }
+        DispatchQueue.main.async {
+            NSApplication.shared.windows.forEach { $0.orderOut(nil) }
+            NSApplication.shared.hide(nil)
+        }
     }
 }
 

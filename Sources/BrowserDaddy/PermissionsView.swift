@@ -69,10 +69,11 @@ struct PermissionsView: View {
 
     private var automation: some View {
         BrowserBand(label: "TABS",
-                    subtitle: "Chrome Automation consent for normal-window tab URLs") {
+                    subtitle: "Chrome Automation and Safari extension access") {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Tab URLs are captured only from verified normal Chrome windows. "
-                     + "Other browsers remain app-only until private-window detection is qualified.")
+                Text("Chrome tabs come from verified normal windows. Safari tabs "
+                     + "come from its optional extension, which excludes Private Browsing "
+                     + "before sharing URLs. Other browsers remain app-only.")
                     .font(.callout).foregroundStyle(BrowserTheme.secondaryInk)
                 ForEach(FocusWatcher.tabCapableBrowsers.values.sorted(),
                         id: \.self) { name in
@@ -85,6 +86,16 @@ struct PermissionsView: View {
                         Spacer()
                         Text(stateLabel(model.automation[name]))
                             .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                HStack {
+                    Circle().fill(BrowserTheme.mintInk.opacity(0.5))
+                        .frame(width: 8, height: 8)
+                    Text("Safari extension").font(.callout)
+                        .foregroundStyle(BrowserTheme.ink)
+                    Spacer()
+                    Button("Open Safari Extensions") {
+                        SafariTabsBridge.openPreferences()
                     }
                 }
                 HStack {

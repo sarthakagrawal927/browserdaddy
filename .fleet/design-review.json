@@ -110,5 +110,14 @@
     "after": "Isolated unsigned fixture build visually inspected through native UI: open-tab rows, grouping, search, no-results state, and clear-search action. Search state kept its header aligned; plain list removed empty striped rows.",
     "checks": "swift test --filter TabInventoryTests: 1 passed; swift test --filter LinkRouterTests: 11 passed; Swift package app build passed.",
     "limits": "The installed app was left untouched. Real Automation permission and clicked-link background behavior require a signed app build for device verification."
+  },
+  "backgroundRouterReview": {
+    "date": "2026-09-26",
+    "mode": "preserve",
+    "direction": "Keep the owner-approved Tab Scout native utility system and existing floating picker.",
+    "interaction": "Clicked links route without a visible app window; copied links show the existing target menu and require selection.",
+    "privacy": "Safari extension checks Private Browsing before reading any page URL or title; uncertain pages are excluded.",
+    "checks": "11 focused routing tests, 2 tab inventory tests, 44 total Swift tests, Release Swift build, Xcode 26.6 universal extension build, isolated native copy-and-cancel check.",
+    "limits": "Default-handler cold launch and enabled Safari extension await signed release runtime verification."
   }
 }

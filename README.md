@@ -1,33 +1,40 @@
 # browserdaddy
 
 Native, local-first macOS browsing-intelligence app — unified cross-browser
-history archive + real attention tracking + link routing + Chrome tab
-inventory and moves to other browsers.
+history archive + real attention tracking + background link routing +
+Chrome and Safari tab inventory.
 
 ## Tabs
 
-The LIVE → Tabs workspace lists open Chrome tabs. The signed sandbox allows
-Apple events to Chrome only. Click selects (⌘-click for several),
+The LIVE → Tabs workspace lists normal Chrome tabs and regular Safari tabs.
+Chrome uses Automation consent and a verified normal-window check. Safari
+uses an optional Safari App Extension; enable **BrowserDaddy Safari Tabs** in
+Safari → Settings → Extensions and grant website access for the sites you
+want listed. The extension discards Private Browsing pages before passing
+URLs or titles to BrowserDaddy. No Safari AppleScript access is granted.
+Click selects (⌘-click for several),
 double-click focuses the real tab, × closes it, and right-click offers Send
 to another browser/profile or Copy URL. A move opens the destination before
-closing the Chrome tab. Search filters title+URL; the list refreshes every 15s while
-visible. First enumeration asks macOS for Chrome Automation consent. Chrome
-incognito windows are excluded via window mode. The browser picker can still
-open links in Safari and Brave; their tabs are not listed here.
+closing the original tab only after the destination opens. Search filters
+title+URL; the list refreshes every 15s while visible. Chrome incognito and
+Safari Private Browsing tabs are excluded. Brave remains a link destination,
+but its tabs are not listed.
 
 ## Link router
 
 Set BrowserDaddy as the macOS default browser (Router workspace → ROUTE, or
 System Settings → Desktop & Dock) and clicked links route silently: first
 matching rule wins, everything else opens in the configured fallback
-browser+profile. Rule patterns are case-insensitive: `github.com` also covers
+browser+profile. BrowserDaddy keeps running without a visible window; its
+menu bar icon opens the full app. Rule patterns are case-insensitive: `github.com` also covers
 subdomains, `*.corp.dev` globs the host, and any pattern containing `/` globs
 the whole URL.
 
-Copy a link in any app and it routes exactly like a clicked link — matching
-rule wins, otherwise the fallback opens (toggle in Router → ACTIONS). The
-floating picker is explicit-only: ⌃⌥O for the copied link, ⌃⌥Space to take
-the frontmost browser's current tab (Chrome/Brave incognito windows refuse).
+Copy a link in any app and a floating browser menu appears (toggle in Router
+→ ACTIONS). A matching rule preselects its target, but nothing opens until
+you choose. ⌃⌥O reopens the menu for the copied link; ⌃⌥Space takes the
+frontmost Chrome or Brave normal tab to another browser. Safari's current-tab
+hotkey is disabled because AppleScript cannot distinguish private windows.
 In the picker: arrows + ⏎, digits 1–9, single click, esc or clicking away
 dismisses it.
 
@@ -48,7 +55,8 @@ scripts/classify-pages.sh      # batch-tag archive pages (opt-in, manual)
 ```
 
 Layout: `Sources/BrowserCore` (archive, extraction, watcher, report engine,
-classifier), `Sources/BrowserDaddy` (SwiftUI app), `Tests/` (XCTest).
+classifier), `Sources/BrowserDaddy` (SwiftUI app), `SafariTabsExtension`
+(privacy-filtered Safari app extension), `Tests/` (XCTest).
 
 Data lives at `~/Library/Application Support/BrowserDaddy/browserdaddy.db`.
 See PRODUCT.md for scope and AGENTS.md for boundaries.

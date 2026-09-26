@@ -213,8 +213,8 @@ struct RouterView: View {
                     .tint(BrowserTheme.mintInk)
                     .foregroundStyle(BrowserTheme.ink)
                 Text(model.routerConfig.clipboardWatch
-                     ? "Copy a link anywhere — rules and fallback route it, "
-                       + "same as a clicked link. No selector pops up."
+                     ? "Copy a link anywhere to choose where it opens. "
+                       + "A matching rule is preselected; nothing opens until you choose."
                      : "Auto-detection is off — use the hotkeys below.")
                     .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
                 HStack(spacing: 12) {
@@ -227,9 +227,9 @@ struct RouterView: View {
                      + "frontmost browser's current tab elsewhere\n"
                      + "In the picker: ↑↓ choose, ⏎ open, 1–9 jump, esc cancel")
                     .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
-                Text("Reading a tab asks macOS for that browser's Automation "
-                     + "consent on first use. Incognito windows can't be "
-                     + "moved in Chrome and Brave.")
+                Text("The current-tab hotkey reads normal Chrome or Brave "
+                     + "windows after Automation consent. Safari tabs are "
+                     + "managed from Tabs after enabling its extension.")
                     .font(.caption).foregroundStyle(BrowserTheme.secondaryInk)
             }
         }

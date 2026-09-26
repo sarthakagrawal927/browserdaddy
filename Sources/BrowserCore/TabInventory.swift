@@ -41,8 +41,8 @@ public enum TabSourceState: Equatable, Sendable {
 
 /// Enumerates and manipulates open tabs across scriptable browsers via
 /// AppleScript. Incognito windows are filtered where the browser exposes a
-/// window mode (verified: Chrome, Brave); elsewhere they simply can't be
-/// distinguished. Reads never log anything; closes/moves are user-initiated.
+/// window mode (verified: Chrome, Brave). Safari is handled by its native
+/// extension, which checks the page's Private Browsing flag before sharing.
 public enum TabInventory {
     private static let fs = "\u{1f}"  // unit separator, same as FocusWatcher
 
@@ -167,7 +167,7 @@ public enum TabInventory {
     static func listScript(kind: BrowserKind) -> String? {
         let tabProps: String
         switch kind {
-        case .safari: tabProps = "(URL of tab t of window w) & s & (name of tab t of window w)"
+        case .safari: return nil
         case .firefox: return nil
         default:      tabProps = "(URL of tab t of window w) & s & (title of tab t of window w)"
         }
