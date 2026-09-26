@@ -3,8 +3,13 @@ import BrowserCore
 
 /// Installs link-router plumbing (GURL handler + global hotkeys) at launch.
 final class BrowserDaddyAppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in LinkRouterService.shared.install() }
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // URL-handler launches should not put a Dock tile in front of the
+        // browser that receives the link.
+        NSApplication.shared.setActivationPolicy(.accessory)
+        // Register GURL before AppKit delivers the launch URL. Starting from
+        // didFinishLaunching can lose a link on a cold launch.
+        MainActor.assumeIsolated { BrowserDaddyRuntime.start() }
     }
 
     /// The app stays alive windowless — routing/hotkeys are background
@@ -33,7 +38,8 @@ final class AppStartup: ObservableObject {
     @Published private(set) var model: AppModel?
     init(openArchive: () throws -> ArchiveStore = { try ArchiveStore() }) {
         do {
-            if CommandLine.arguments.contains("--preview-fixture") {
+            if CommandLine.arguments.contains("--preview-fixture")
+                || Bundle.main.bundleIdentifier?.hasSuffix(".preview") == true {
                 let fixture = AppModel(store: try PreviewArchive.make(),
                                        startCollection: {}, previewFixture: true)
                 fixture.tabGroups = PreviewArchive.tabGroups
@@ -41,8 +47,23 @@ final class AppStartup: ObservableObject {
             } else {
                 model = AppModel(store: try openArchive())
             }
+            model?.boot()
         }
         catch { model = nil }
+    }
+}
+
+/// SwiftUI constructs scene content only when a window or menu is opened.
+/// Own the model here so routing, clipboard polling, attention, and updates
+/// start even when the utility spends its whole session windowless.
+@MainActor
+private enum BrowserDaddyRuntime {
+    static let startup = AppStartup()
+    static let updates = AppUpdates()
+
+    static func start() {
+        if let model = startup.model { updates.start(model: model) }
+        LinkRouterService.shared.install()
     }
 }
 
@@ -109,9 +130,31 @@ private struct BrowserDaddyContent: View {
         .onAppear {
             WindowReopener.shared.openWindow = openWindow
             if LinkRouterService.shared.justRoutedLink {
-                DispatchQueue.main.async { NSApplication.shared.hide(nil) }
+                DispatchQueue.main.async {
+                    NSApplication.shared.windows.forEach { $0.orderOut(nil) }
+                    NSApplication.shared.hide(nil)
+                }
             }
         }
+    }
+}
+
+private struct BrowserDaddyStatusMenu: View {
+    @ObservedObject var startup: AppStartup
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Open BrowserDaddy") {
+            NSApplication.shared.setActivationPolicy(.regular)
+            openWindow(id: "main")
+            NSApplication.shared.activate()
+        }
+        Button("Choose browser for copied link") {
+            startup.model?.openClipboardLink()
+        }
+        .disabled(startup.model == nil)
+        Divider()
+        Button("Quit BrowserDaddy") { NSApplication.shared.terminate(nil) }
     }
 }
 
@@ -119,16 +162,18 @@ private struct BrowserDaddyContent: View {
 struct BrowserDaddyApp: App {
     @NSApplicationDelegateAdaptor(BrowserDaddyAppDelegate.self)
         private var appDelegate
-    @StateObject private var startup = AppStartup()
-    @StateObject private var updates = AppUpdates()
+    @ObservedObject private var startup = BrowserDaddyRuntime.startup
+    @ObservedObject private var updates = BrowserDaddyRuntime.updates
 
     var body: some Scene {
+        MenuBarExtra("BrowserDaddy", systemImage: "link") {
+            BrowserDaddyStatusMenu(startup: startup)
+        }
+
         WindowGroup("browserdaddy", id: "main") {
             Group {
                 if let model = startup.model {
                     BrowserDaddyContent(model: model)
-                    .onAppear { model.boot() }
-                    .task { updates.start(model: model) }
                 } else {
                     ContentUnavailableView {
                         Label("Couldn’t open your archive", systemImage: "externaldrive.badge.exclamationmark")

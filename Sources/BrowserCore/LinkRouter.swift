@@ -44,8 +44,8 @@ public struct RouterConfig: Codable, Equatable, Sendable {
     /// Manually declared Chromium profile dirs per browser — merged with
     /// profiles discovered under connected browser roots.
     public var profiles: [String: [String]] = [:]
-    /// Auto-react to copied links while a browser is frontmost: rule match
-    /// opens directly, otherwise the picker appears.
+    /// Show the target picker for newly copied links. Rules preselect a row;
+    /// copying alone never opens a browser.
     public var clipboardWatch = true
 
     public init() {}
@@ -288,12 +288,9 @@ public enum FrontmostTab {
     static func tabScript(kind: BrowserKind) -> String? {
         switch kind {
         case .safari:
-            return """
-                tell application id "\(kind.bundleIdentifier)"
-                    if (count of windows) is 0 then return ""
-                    return URL of current tab of front window
-                end tell
-                """
+            // Safari AppleScript has no private-window flag. The Safari app
+            // extension handles normal tabs after checking that flag.
+            return nil
         case .chrome, .brave:
             // Window mode distinguishes normal/incognito in the Chromium
             // scripting dictionary (verified in Chrome + Brave sdefs) — a

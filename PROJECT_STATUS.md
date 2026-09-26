@@ -1,5 +1,22 @@
 # BrowserDaddy — project status
 
+## 2026-09-26 — background routing, copied-link picker, Safari tabs candidate
+
+Clicked HTTP(S) links still use ordered rules and fallback, but launch as a
+windowless menu bar utility and register the GURL handler before launch URLs
+arrive. A copied HTTP(S) URL now opens the floating target menu; choosing a
+browser opens it, while dismissing the menu does nothing. Safari tab inventory
+uses a bundled Safari App Extension that checks Private Browsing before reading
+or sharing page URLs and titles. The old Safari AppleScript tab and current-tab
+paths are disabled. Safari tab access remains optional in Safari Settings.
+
+Focused router and tab tests, the full 44-test Swift package suite, Release
+build, and stable Xcode 26.6 universal extension build passed. An isolated
+native preview showed the copied-link menu without surfacing the main window
+and cancellation opened no browser. Signed extension enablement, clicked-link
+handling through a default-browser launch, and release qualification remain
+pending. GitHub issue #25 tracks those checks.
+
 ## 2026-09-25 — 0.4.0 build 5: link router + tabs shipped
 
 Released the link router, picker, and Tabs workspace described below.

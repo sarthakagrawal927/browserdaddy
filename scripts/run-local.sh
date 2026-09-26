@@ -20,11 +20,25 @@ cp -R "$bin_path/BrowserDaddy_BrowserDaddy.bundle" "$bundle_path/Contents/Resour
 rm -rf "$bundle_path/Contents/Frameworks"
 mkdir -p "$bundle_path/Contents/Frameworks"
 cp -R "$bin_path/Sparkle.framework" "$bundle_path/Contents/Frameworks/" 2>/dev/null || true
+xcodebuild -project SafariTabsExtension/SafariTabsExtension.xcodeproj \
+    -target SafariTabsExtension -configuration Debug \
+    "SYMROOT=$PWD/.build/safari-dev-products" CODE_SIGNING_ALLOWED=NO \
+    build -quiet
+mkdir -p "$bundle_path/Contents/PlugIns"
+cp -R .build/safari-dev-products/Debug/SafariTabsExtension.appex \
+    "$bundle_path/Contents/PlugIns/"
+/usr/libexec/PlistBuddy -c \
+    'Set :CFBundleIdentifier com.significanthobbies.browserdaddy.dev.safaritabs' \
+    "$bundle_path/Contents/PlugIns/SafariTabsExtension.appex/Contents/Info.plist"
 # TCC (Automation consent etc.) keys grants to the signing identity — an
 # ad-hoc signature gets a new identity every build, silently dropping grants.
 # A stable development signature keeps them across rebuilds.
 identity="$(security find-identity -v -p codesigning | grep -m1 'Apple Development' | sed 's/.*"\(.*\)"/\1/' || true)"
 if [ -n "$identity" ]; then
-    codesign --force --deep --sign "$identity" "$bundle_path" 2>/dev/null || true
+    codesign --force --sign "$identity" \
+        --entitlements SafariTabsExtension/Entitlements.plist \
+        "$bundle_path/Contents/PlugIns/SafariTabsExtension.appex"
+    codesign --force --sign "$identity" \
+        --entitlements Support/Release.entitlements "$bundle_path"
 fi
 open -n "$bundle_path" --args "$@"

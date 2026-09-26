@@ -3,8 +3,8 @@ import BrowserCore
 import Combine
 import SwiftUI
 
-/// Live cross-browser tab inventory. Reads are AppleScript; closes/moves are
-/// user-initiated. Chrome/Brave incognito windows are filtered at the source.
+/// Live tab inventory. Chrome uses normal-window AppleScript; Safari's app
+/// extension filters Private Browsing before it shares any tab details.
 struct TabsView: View {
     @EnvironmentObject private var model: AppModel
     private let refreshTimer = Timer.publish(every: 15, on: .main,
@@ -59,15 +59,19 @@ struct TabsView: View {
 
     private var tabSummary: String {
         let total = model.allTabs.count
+        guard total > 0 else { return "No regular tabs shared yet" }
+        let browserCount = Set(model.allTabs.map(\.browser)).count
+        let sourceLabel = browserCount > 1 ? "across browsers" :
+            (model.allTabs.first?.browser.displayName ?? "browser")
         guard !model.tabSearch.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "\(total.formatted()) Chrome "
-                + (total == 1 ? "tab" : "tabs")
+            return "\(total.formatted()) " + (total == 1 ? "tab" : "tabs")
+                + " \(sourceLabel)"
         }
         let visible = model.filteredTabGroups.reduce(0) { count, group in
             guard case .tabs(let tabs) = group.state else { return count }
             return count + tabs.count
         }
-        return "\(visible.formatted()) of \(total.formatted()) Chrome tabs shown"
+        return "\(visible.formatted()) of \(total.formatted()) tabs shown"
     }
 
     private var toolbarControls: some View {
@@ -110,9 +114,9 @@ struct TabsView: View {
             if model.tabsRefreshing {
                 ProgressView("Reading open tabs…")
             } else {
-                ContentUnavailableView("Chrome is not available",
+                ContentUnavailableView("No browsers available",
                                        systemImage: "macwindow.on.rectangle",
-                                       description: Text("Install Chrome to see its open tabs."))
+                                       description: Text("Open Chrome or Safari to see tabs."))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -131,22 +135,30 @@ struct TabsView: View {
                     case .notRunning:
                         stateNote("browser is closed")
                     case .noWindows:
-                        stateNote("no open windows")
+                        stateNote(group.kind == .safari
+                                  ? "no regular tabs shared — check Safari website access"
+                                  : "no open windows")
                     case .needsConsent:
                         HStack(spacing: 8) {
-                            Text("needs Automation permission — ")
-                            Button("Allow \(group.kind.displayName)") {
+                            Text(group.kind == .safari
+                                 ? "Enable BrowserDaddy Safari Tabs in Safari Settings — "
+                                 : "needs Automation permission — ")
+                            Button(group.kind == .safari
+                                   ? "Open Safari Extensions"
+                                   : "Allow \(group.kind.displayName)") {
                                 model.requestTabConsent(group.kind)
                             }
                             .buttonStyle(.link)
-                            Text("·")
-                            Button("Open Settings") {
-                                NSWorkspace.shared.open(URL(string:
-                                    "x-apple.systempreferences:"
-                                    + "com.apple.preference.security"
-                                    + "?Privacy_Automation")!)
+                            if group.kind != .safari {
+                                Text("·")
+                                Button("Open Settings") {
+                                    NSWorkspace.shared.open(URL(string:
+                                        "x-apple.systempreferences:"
+                                        + "com.apple.preference.security"
+                                        + "?Privacy_Automation")!)
+                                }
+                                .buttonStyle(.link)
                             }
-                            .buttonStyle(.link)
                         }
                         .font(.caption)
                         .foregroundStyle(BrowserTheme.secondaryInk.opacity(0.7))

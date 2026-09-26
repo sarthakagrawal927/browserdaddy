@@ -313,19 +313,11 @@ final class AppModel: ObservableObject {
     }
 
     /// Pasteboard changed (fired by LinkRouterService's poll). Every fresh
-    /// copy of a link reacts — the changeCount gate handles dedupe, so
-    /// re-copying the same URL re-triggers on purpose. Copied links route
-    /// exactly like clicked ones: first rule match wins, else fallback —
-    /// the picker only appears on explicit invocation (hotkeys, buttons).
+    /// copy of a link opens the target picker. Re-copying the same URL opens
+    /// it again; nothing launches until the person chooses a target.
     func clipboardPasted() {
-        guard routerConfig.enabled, routerConfig.clipboardWatch,
-              let url = clipboardURL()
-        else { return }
-        let rule = RuleEngine.match(url, rules: routerConfig.rules)
-        if openTarget(url, rule?.target ?? routerConfig.fallback) {
-            routerStatus = rule.map { "→ \(rule!.target.label) · \($0.pattern)" }
-                ?? "→ \(routerConfig.fallback.label)"
-        }
+        guard routerConfig.clipboardWatch, let url = clipboardURL() else { return }
+        presentPicker(url)
     }
 
     // MARK: tabs inventory
@@ -335,7 +327,11 @@ final class AppModel: ObservableObject {
         tabsRefreshing = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let raw = TabInventory.inventory()
-            let groups = raw.map { TabGroup(kind: $0.kind, state: $0.state) }
+            var groups = raw.map { TabGroup(kind: $0.kind, state: $0.state) }
+            if BrowserOpener.appURL(for: .safari) != nil {
+                let safari = await SafariTabsBridge.inventory()
+                groups.append(TabGroup(kind: .safari, state: safari))
+            }
             await MainActor.run {
                 self?.tabGroups = groups
                 self?.tabsRefreshing = false
@@ -345,6 +341,10 @@ final class AppModel: ObservableObject {
 
     /// Manual re-ask — the "Allow <browser>" affordance in Tabs.
     func requestTabConsent(_ kind: BrowserKind) {
+        if kind == .safari {
+            SafariTabsBridge.openPreferences()
+            return
+        }
         Task.detached { [weak self] in
             TabInventory.requestConsent(for: kind)
             await MainActor.run { self?.refreshTabs() }
@@ -352,10 +352,37 @@ final class AppModel: ObservableObject {
     }
 
     func closeTab(_ tab: BrowserTab) {
+        if tab.browser == .safari {
+            Task {
+                let result = await SafariTabsBridge.operate("close", tab: tab)
+                if case .failed(let message) = result { routerStatus = "✗ \(message)" }
+                refreshTabs()
+            }
+            return
+        }
         runTabOp { TabInventory.close(tab) }
     }
 
     func closeTabs(_ tabs: [BrowserTab]) {
+        if tabs.contains(where: { $0.browser == .safari }) {
+            Task {
+                var failures = 0
+                for tab in tabs.sorted(by: {
+                    ($0.window, $0.index) > ($1.window, $1.index)
+                }) {
+                    let result: TabSourceState
+                    if tab.browser == .safari {
+                        result = await SafariTabsBridge.operate("close", tab: tab)
+                    } else {
+                        result = TabInventory.close(tab)
+                    }
+                    if case .tabs = result {} else { failures += 1 }
+                }
+                if failures > 0 { routerStatus = "\(failures) tab(s) could not be closed" }
+                refreshTabs()
+            }
+            return
+        }
         runTabOp {
             var last: TabSourceState = .tabs([])
             for t in tabs { last = TabInventory.close(t) }
@@ -364,6 +391,13 @@ final class AppModel: ObservableObject {
     }
 
     func focusTab(_ tab: BrowserTab) {
+        if tab.browser == .safari {
+            Task {
+                let result = await SafariTabsBridge.operate("focus", tab: tab)
+                if case .failed(let message) = result { routerStatus = "✗ \(message)" }
+            }
+            return
+        }
         runTabOp(refreshAfter: false) { TabInventory.focus(tab) }
     }
 
@@ -374,9 +408,18 @@ final class AppModel: ObservableObject {
             guard let url = URL(string: tab.url) else { return }
             do {
                 try BrowserOpener.open(url, target: target)
-                _ = TabInventory.close(tab)
+                var sourceClosed = true
+                if tab.browser == .safari {
+                    let result = await SafariTabsBridge.operate("close", tab: tab)
+                    if case .tabs = result {} else { sourceClosed = false }
+                } else {
+                    let result = TabInventory.close(tab)
+                    if case .tabs = result {} else { sourceClosed = false }
+                }
                 await MainActor.run {
-                    self?.routerStatus = "→ \(target.label)"
+                    self?.routerStatus = sourceClosed
+                        ? "→ \(target.label)"
+                        : "opened in \(target.label); source tab stayed open"
                 }
             } catch {
                 await MainActor.run {

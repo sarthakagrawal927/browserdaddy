@@ -1,0 +1,20 @@
+name: SafariTabsExtension
+options:
+  bundleIdPrefix: com.significanthobbies.browserdaddy
+targets:
+  SafariTabsExtension:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: '14.0'
+    sources:
+      - path: SafariTabsHandler.swift
+      - path: ../Sources/BrowserCore/SafariTabWire.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.significanthobbies.browserdaddy.safaritabs
+        INFOPLIST_FILE: Info.plist
+        CODE_SIGN_ENTITLEMENTS: Entitlements.plist
+        SWIFT_VERSION: '5.0'
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        CODE_SIGNING_ALLOWED: NO
