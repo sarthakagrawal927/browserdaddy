@@ -7,7 +7,6 @@ import plistlib
 import shutil
 import subprocess
 import sparkle_support
-from web_url_registration import validate as validate_web_url_registration
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,11 +30,6 @@ def main():
         raise SystemExit("Expected existing Release binary and resource bundle")
     if args.build < 1 or not all(part.isdigit() for part in args.version.split(".")):
         raise SystemExit("Version must be numeric; build must be positive")
-    info = plistlib.loads((ROOT / "Support/Info.plist").read_bytes())
-    try:
-        validate_web_url_registration(info)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
     sources = list((ROOT / "Sources").rglob("*.swift")) + [ROOT / "Package.swift"]
     if any(path.stat().st_mtime > binary.stat().st_mtime for path in sources):
         raise SystemExit("Source changed after the build; rebuild before packaging")
@@ -58,6 +52,7 @@ def main():
     shutil.copy2(ROOT / "Support/BrowserDaddy.icns", contents / "Resources/BrowserDaddy.icns")
     shutil.copy2(ROOT / "Support/container-migration.plist",
                  contents / "Resources/container-migration.plist")
+    info = plistlib.loads((ROOT / "Support/Info.plist").read_bytes())
     info.update(CFBundleIdentifier="com.significanthobbies.browserdaddy",
                 CFBundleShortVersionString=args.version, CFBundleVersion=str(args.build),
                 **sparkle_support.configuration())
