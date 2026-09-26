@@ -47,7 +47,9 @@ public enum TabInventory {
     private static let fs = "\u{1f}"  // unit separator, same as FocusWatcher
 
     public static func inventory() -> [(kind: BrowserKind, state: TabSourceState)] {
-        BrowserKind.allCases.compactMap { kind in
+        // The signed sandbox permits Apple events to Chrome only. Keep this
+        // list aligned with Support/Release.entitlements.
+        [BrowserKind.chrome].compactMap { kind in
             guard BrowserOpener.appURL(for: kind) != nil else { return nil }
             return (kind, state(for: kind))
         }
