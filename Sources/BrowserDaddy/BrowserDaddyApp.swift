@@ -12,6 +12,7 @@ final class BrowserDaddyAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
         if flag { return true }
+        if LinkRouterService.shared.justRoutedLink { return false }
         guard let open = WindowReopener.shared.openWindow else { return true }
         open(id: "main")
         sender.activate()
@@ -33,7 +34,10 @@ final class AppStartup: ObservableObject {
     init(openArchive: () throws -> ArchiveStore = { try ArchiveStore() }) {
         do {
             if CommandLine.arguments.contains("--preview-fixture") {
-                model = AppModel(store: try PreviewArchive.make(), startCollection: {})
+                let fixture = AppModel(store: try PreviewArchive.make(),
+                                       startCollection: {}, previewFixture: true)
+                fixture.tabGroups = PreviewArchive.tabGroups
+                model = fixture
             } else {
                 model = AppModel(store: try openArchive())
             }
@@ -43,6 +47,22 @@ final class AppStartup: ObservableObject {
 }
 
 private enum PreviewArchive {
+    static let tabGroups: [AppModel.TabGroup] = [
+        .init(kind: .chrome, state: .tabs([
+            BrowserTab(browser: .chrome, window: 1, index: 1,
+                       url: "https://github.com/example/project/pulls",
+                       title: "Pull requests · example/project"),
+            BrowserTab(browser: .chrome, window: 1, index: 2,
+                       url: "https://developer.apple.com/documentation/swiftui",
+                       title: "SwiftUI documentation"),
+        ])),
+        .init(kind: .safari, state: .tabs([
+            BrowserTab(browser: .safari, window: 1, index: 1,
+                       url: "https://news.ycombinator.com/",
+                       title: "Hacker News"),
+        ])),
+    ]
+
     static func make() throws -> ArchiveStore {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("BrowserDaddy-preview-\(UUID().uuidString).db")
@@ -91,7 +111,12 @@ private struct BrowserDaddyContent: View {
             else { RootView() }
         }
         .environmentObject(model)
-        .onAppear { WindowReopener.shared.openWindow = openWindow }
+        .onAppear {
+            WindowReopener.shared.openWindow = openWindow
+            if LinkRouterService.shared.justRoutedLink {
+                DispatchQueue.main.async { NSApplication.shared.hide(nil) }
+            }
+        }
     }
 }
 

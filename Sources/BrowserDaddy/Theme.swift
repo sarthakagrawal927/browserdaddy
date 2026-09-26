@@ -21,18 +21,25 @@ enum BrowserTheme {
 struct DaddyButtonStyle: ButtonStyle {
     var prominent = false
     @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovering = false
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        return configuration.label
             .font(.system(size: 13, weight: .medium))
             .padding(.horizontal, 11).padding(.vertical, 7)
             .foregroundStyle(prominent ? Color.black : BrowserTheme.mintInk)
-            .background(prominent ? BrowserTheme.mintInk : Color.black,
-                        in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7)
-                .stroke(BrowserTheme.mintInk.opacity(prominent ? 1 : 0.35),
+            .background(prominent ? BrowserTheme.mintInk
+                        : isHovering && isEnabled ? BrowserTheme.mint : Color.black,
+                        in: shape)
+            .overlay(shape
+                .stroke(BrowserTheme.mintInk.opacity(prominent ? 1
+                    : isHovering && isEnabled ? 0.7 : 0.35),
                         lineWidth: 1))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
+            .contentShape(shape)
+            .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: isHovering)
     }
 }
 
@@ -97,12 +104,13 @@ struct BrowserBand<Content: View>: View {
                 }
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(BrowserTheme.secondaryInk.opacity(0.78))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(collapsed ? "Expand" : "Collapse") \(label)")
     }
 }
 

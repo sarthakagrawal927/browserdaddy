@@ -143,7 +143,7 @@ public enum TabInventory {
         }
     }
 
-    private static func listScript(kind: BrowserKind) -> String? {
+    static func listScript(kind: BrowserKind) -> String? {
         let tabProps: String
         switch kind {
         case .safari: tabProps = "(URL of tab t of window w) & s & (name of tab t of window w)"
@@ -153,8 +153,7 @@ public enum TabInventory {
         let body = """
                     repeat with t from 1 to (count of tabs of window w)
                         try
-                            set out to out & w & s & t & s
-                                & \(tabProps) & linefeed
+                            set out to out & w & s & t & s & \(tabProps) & linefeed
                         end try
                     end repeat
             """
