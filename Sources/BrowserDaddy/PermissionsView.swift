@@ -102,6 +102,9 @@ struct PermissionsView: View {
         BrowserBand(label: "COLLECTION",
                     subtitle: "What runs while the app is alive") {
             VStack(alignment: .leading, spacing: 13) {
+                Text("Closing the window keeps local attention collection and periodic history sync running. Quit BrowserDaddy to stop them.")
+                    .font(.caption)
+                    .foregroundStyle(BrowserTheme.secondaryInk)
                 Toggle("Launch at login", isOn: Binding(
                     get: { model.launchAtLogin },
                     set: { model.setLaunchAtLogin($0) }))

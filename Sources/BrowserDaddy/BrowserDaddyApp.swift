@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import BrowserCore
 
@@ -69,11 +70,12 @@ private struct BrowserDaddyContent: View {
 
 @main
 struct BrowserDaddyApp: App {
+    @NSApplicationDelegateAdaptor(BrowserDaddyDelegate.self) private var appDelegate
     @StateObject private var startup = AppStartup()
     @StateObject private var updates = AppUpdates()
 
     var body: some Scene {
-        WindowGroup("browserdaddy") {
+        Window("browserdaddy", id: "main") {
             Group {
                 if let model = startup.model {
                     BrowserDaddyContent(model: model)
@@ -115,6 +117,12 @@ struct BrowserDaddyApp: App {
             }
         }
 
+        MenuBarExtra {
+            BrowserMenu(model: startup.model)
+        } label: {
+            Label("BrowserDaddy", systemImage: "globe")
+        }
+
         Settings {
             Group {
                 if let model = startup.model {
@@ -140,6 +148,45 @@ struct BrowserDaddyApp: App {
             .tint(BrowserTheme.action)
             .buttonStyle(DaddyButtonStyle())
         }
+    }
+}
+
+@MainActor
+final class BrowserDaddyDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+private struct BrowserMenu: View {
+    let model: AppModel?
+
+    var body: some View {
+        if let model {
+            BrowserActiveMenu(model: model)
+        } else {
+            Text("Archive unavailable")
+            Divider()
+            DaddyMenuOpenButton(appName: "BrowserDaddy")
+            Divider()
+            DaddyMenuQuitButton(appName: "BrowserDaddy")
+        }
+    }
+}
+
+private struct BrowserActiveMenu: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        Text(model.needsOnboarding ? "Setup needed before collection" :
+            model.extracting ? "Syncing local history…" :
+            model.watcher.isRunning ? "Collecting local attention" : "Collection is not running")
+        Divider()
+        DaddyMenuOpenButton(appName: "BrowserDaddy")
+        if !model.needsOnboarding {
+            Button("Sync History") { model.runExtract() }
+                .disabled(model.extracting)
+        }
+        Divider()
+        DaddyMenuQuitButton(appName: "BrowserDaddy")
     }
 }
 
