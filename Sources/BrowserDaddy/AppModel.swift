@@ -250,14 +250,17 @@ final class AppModel: ObservableObject {
     /// Clicked link while BrowserDaddy is the default browser — silent:
     /// first matching rule wins, else fallback. Never sends a link back to
     /// LaunchServices' default (that would be us — a loop).
-    func route(_ url: URL) {
+    @discardableResult
+    func route(_ url: URL) -> Bool {
         let rule = routerConfig.enabled
             ? RuleEngine.match(url, rules: routerConfig.rules) : nil
         let target = rule?.target ?? routerConfig.fallback
         if openTarget(url, target) {
             routerStatus = rule.map { "→ \(target.label) · \($0.pattern)" }
                 ?? "→ \(target.label)"
+            return true
         }
+        return false
     }
 
     @discardableResult
@@ -269,7 +272,11 @@ final class AppModel: ObservableObject {
             // Fallback recovery — any installed browser, never ourselves.
             for kind in BrowserKind.allCases where kind != target.browser {
                 guard BrowserOpener.appURL(for: kind) != nil else { continue }
-                try? BrowserOpener.open(url, target: LinkTarget(browser: kind))
+                do {
+                    try BrowserOpener.open(url, target: LinkTarget(browser: kind))
+                } catch {
+                    continue
+                }
                 let why = (error as? BrowserOpener.Failure)?.isPermissionDenied == true
                     ? "needs permission — check Privacy & Security "
                         + "in System Settings"

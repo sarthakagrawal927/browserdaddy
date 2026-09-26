@@ -11,6 +11,7 @@ final class BrowserDaddyAppDelegate: NSObject, NSApplicationDelegate {
     /// features — but a Dock/⌘-tab click must rebuild the main window.
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
+        if LinkRouterService.shared.shouldKeepWindowHidden { return false }
         if flag { return true }
         guard let open = WindowReopener.shared.openWindow else { return true }
         open(id: "main")

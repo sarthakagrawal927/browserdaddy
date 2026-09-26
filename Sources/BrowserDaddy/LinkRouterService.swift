@@ -17,6 +17,11 @@ final class LinkRouterService: NSObject {
     let picker = LinkPickerPanelController()
     private var pendingURL: URL?
     private var installed = false
+    private var lastSuccessfulRouteAt = Date.distantPast
+
+    var shouldKeepWindowHidden: Bool {
+        Date().timeIntervalSince(lastSuccessfulRouteAt) < 1
+    }
 
     // ⌃⌥O — clipboard link picker; ⌃⌥Space — move current tab.
     static let clipboardKey = (code: UInt32(kVK_ANSI_O), name: "⌃⌥O")
@@ -68,7 +73,7 @@ final class LinkRouterService: NSObject {
               let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return }
         if let model {
-            model.route(url)
+            routeWithoutShowingWindow(url, using: model)
         } else {
             pendingURL = url
         }
@@ -79,7 +84,16 @@ final class LinkRouterService: NSObject {
     func drainPending() {
         guard let url = pendingURL, let model else { return }
         pendingURL = nil
-        model.route(url)
+        routeWithoutShowingWindow(url, using: model)
+    }
+
+    private func routeWithoutShowingWindow(_ url: URL, using model: AppModel) {
+        guard model.route(url) else { return }
+        lastSuccessfulRouteAt = Date()
+        NSApplication.shared.hide(nil)
+        // Cold launches may finish placing the SwiftUI window after GURL runs.
+        // Keep the route silent without affecting an explicit later Dock click.
+        DispatchQueue.main.async { NSApplication.shared.hide(nil) }
     }
 }
 
