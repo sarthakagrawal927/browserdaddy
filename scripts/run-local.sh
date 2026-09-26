@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
+python3 scripts/web_url_registration.py Support/Info.plist
 if pgrep -x BrowserDaddy >/dev/null; then
     echo "Quit BrowserDaddy before rebuilding the local app."
     exit 1
